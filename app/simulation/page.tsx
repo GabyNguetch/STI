@@ -140,7 +140,62 @@ const MedicalSimulationPage = () => {
   
   return (
     <div className="min-h-screen bg-primary relative overflow-hidden font-sans">
-       
+       {/* --- Début de l'intégration de la configuration Tailwind en CSS --- */}
+      <style jsx global>{`
+        /* 1. Définition des couleurs primaires comme variables CSS */
+        :root {
+          --color-primary: #052648;
+          --color-primary-dark: #031a31;
+        }
+
+        /* 2. Classes utilitaires qui utilisent ces couleurs */
+        .bg-primary {
+          background-color: var(--color-primary);
+        }
+        .text-primary {
+          color: var(--color-primary);
+        }
+        .border-primary {
+          border-color: var(--color-primary);
+        }
+        .bg-primary-dark {
+          background-color: var(--color-primary-dark);
+        }
+        .text-primary-dark {
+          color: var(--color-primary-dark);
+        }
+        .border-primary-dark {
+          border-color: var(--color-primary-dark);
+        }
+
+        /* 3. Définition des animations (Keyframes) */
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        /* 4. Classes pour appliquer les animations */
+        /* Disponibles globalement pour ce composant et ses enfants */
+        .animate-fade-in {
+          animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        .animate-fade-in-up {
+          animation: fadeInUp 0.5s ease-out forwards;
+        }
+      `}</style>
+       {/* --- Fin de l'intégration --- */}
       {(currentView === 'home' || currentView === 'patientInfo') && (
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url(/images/hopital.jpg)' }}>
             <div className="absolute inset-0 bg-black/50"></div>
