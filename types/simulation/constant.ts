@@ -1,5 +1,5 @@
-import { Heart, Baby, Ear, Brain, Eye, Bone, Wind, Activity } from 'lucide-react';
-import { Service, PatientsData } from './types';
+import { Heart, Baby, Ear, Brain, Eye, Bone, Wind, Activity, Droplet, Shield, Microscope, TestTube, Users, Thermometer, Syringe, CloudDrizzle } from 'lucide-react';
+import { Service, PatientsData, ClinicalExam } from '@/types/simulation/types';
 
 export const MAIN_COLOR = '#052648';
 
@@ -31,3 +31,15 @@ export const patientsData: PatientsData = {
   },
   // ... autres patients
 };
+
+// ----- DANS LA SECTION OÙ VOUS PRÉPAREZ VOS DONNÉES (POUR L'EXEMPLE) -----
+// Voici une liste d'exemple des 7 examens cliniques fréquents au Cameroun
+export const exampleExams: ClinicalExam[] = [
+  { name: "Goutte épaisse (Paludisme)", icon: Syringe, resultat: "Positive ++" },
+  { name: "Test rapide VIH", icon: Shield, resultat: "Négatif" },
+  { name: "Examen des crachats (Tuberculose)", icon: Microscope, resultat: "BAAR Négatif" },
+  { name: "Glycémie à jeun", icon: TestTube, resultat: "0.95 g/L" },
+  { name: "Tension Artérielle", icon: Activity, resultat: "125/80 mmHg" },
+  { name: "Examen des selles", icon: CloudDrizzle, resultat: "Kystes d'amibes" },
+  { name: "NFS (Numération Formule Sanguine)", icon: Thermometer, resultat: "Anémie légère" }
+];

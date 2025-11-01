@@ -42,3 +42,11 @@ export interface DiagnosticTool {
     key: keyof Patient; // Assure que la clé existe dans l'objet Patient
     patientValue: string | number | undefined;
 }
+
+export interface ClinicalExam {
+  name: string;
+  icon: React.ElementType; // Ou JSX.Element, selon votre configuration
+  resultat: string; // Le résultat de l'examen à afficher
+}
+
+

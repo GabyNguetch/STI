@@ -26,7 +26,7 @@ const DiagnosticTools: React.FC<DiagnosticToolsProps> = ({ tools, onToolClick })
         <div key={tool.name} className="group relative">
           <button
             onClick={() => onToolClick(tool)}
-            className="w-14 h-14 flex items-center justify-center bg-gradient-to-br from-primary to-blue-700 hover:from-blue-700 hover:to-primary text-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-110"
+            className="w-14 h-14 flex items-center justify-center bg-white text-[#052648] rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-110"
             aria-label={`Utiliser l'outil ${tool.name}`}
           >
             {/* L'icône est rendue dynamiquement à partir des props. */}
@@ -34,7 +34,7 @@ const DiagnosticTools: React.FC<DiagnosticToolsProps> = ({ tools, onToolClick })
           </button>
           
           {/* Tooltip qui apparaît au survol (hover). */}
-          <div className="absolute top-1/2 -translate-y-1/2 right-full mr-3 px-3 py-2 bg-gray-800 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl">
+          <div className="absolute top-1/2 -translate-y-1/2 right-full mr-3 px-3 py-2 bg-gray-200 text-gray-800 font-bold text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl">
             {tool.name}
           </div>
         </div>

@@ -10,6 +10,7 @@ import PatientInfoView from '@/components/simulation/PatientInfoView';
 import ConsultationView from '@/components/simulation/ConsultationView';
 import { services, patientsData } from '@/types/simulation/constant';
 import { Patient, Service, Message, Icon } from '@/types/simulation/types';
+import { exampleExams } from '@/types/simulation/constant';
 
 const MedicalSimulationPage = () => {
   const [currentView, setCurrentView] = useState('home');
@@ -119,6 +120,7 @@ const MedicalSimulationPage = () => {
                 messageCount={messageCount}
                 diagnosticTools={diagnosticTools}
                 onToolClick={handleToolClick}
+                clinicalExams={exampleExams} 
                 isGameOver={isGameOver}
                 onReset={resetSimulation}
               />

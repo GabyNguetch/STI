@@ -5,9 +5,6 @@ import React, { useEffect, useRef } from 'react';
 import { User, Stethoscope, UserRound, FileText, Send, Lightbulb } from 'lucide-react';
 import { Message, Patient, Service } from '@/types/simulation/types';
 
-/**
- * Props pour le composant ChatWindow.
- */
 interface ChatWindowProps {
   patientData: Patient;
   selectedService: Service;
@@ -21,85 +18,89 @@ interface ChatWindowProps {
   onShowPatientInfo: () => void;
 }
 
-/**
- * Affiche l'interface complète de la fenêtre de chat.
- * Gère l'affichage des messages, la saisie utilisateur et l'état de la simulation.
- */
 const ChatWindow: React.FC<ChatWindowProps> = ({
-  patientData, selectedService, messages, inputMessage,
-  onInputChange, onSendMessage, messageCount, isGameOver,
-  onReset, onShowPatientInfo
+  patientData,
+  selectedService,
+  messages,
+  inputMessage,
+  onInputChange,
+  onSendMessage,
+  messageCount,
+  isGameOver,
+  onReset,
+  onShowPatientInfo
 }) => {
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fait défiler la vue vers le dernier message à chaque mise à jour.
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
-  useEffect(scrollToBottom, [messages]);
   
+  useEffect(scrollToBottom, [messages]);
+
   const questionsRemaining = 5 - messageCount;
   const progressBarWidth = (questionsRemaining / 5) * 100;
 
   return (
-    <div className="w-full h-full flex flex-col bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden">
-        
-      {/* En-tête du chat amélioré */}
-      <div className="flex-shrink-0 p-4 border-b border-slate-200 bg-slate-50">
+    <div className="w-full h-[600px] flex flex-col bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
+      
+      {/* En-tête moderne et épuré */}
+      <div className="flex-shrink-0 p-5 border-b border-gray-100 bg-white">
         <button onClick={onShowPatientInfo} className="w-full text-left group">
           <div className="flex items-center gap-4">
             <div className="relative">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-blue-700 flex items-center justify-center text-white shadow-md">
-                <UserRound className="w-7 h-7" />
-                </div>
-                <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 rounded-full border-2 border-slate-50 animate-pulse" title="Patient en ligne"></div>
+              <img 
+                src="/images/patient.jpeg" 
+                alt={patientData.nom}
+                className="w-12 h-12 rounded-full object-cover border-2 border-[#052648]"
+              />
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white"></div>
             </div>
-            <div>
-              <h3 className="text-primary font-bold text-lg group-hover:text-blue-700 transition-colors">{patientData.nom}</h3>
-              <p className="text-slate-500 text-sm">Patient du service {selectedService.name}</p>
+            <div className="flex-1">
+              <h3 className="text-[#052648] font-semibold text-base">{patientData.nom}</h3>
+              <p className="text-gray-500 text-sm">Service {selectedService.name}</p>
             </div>
-            <FileText className="w-5 h-5 text-slate-400 ml-auto group-hover:text-blue-700 transition-colors" />
+            <FileText className="w-5 h-5 text-gray-400 group-hover:text-[#052648] transition-colors" />
           </div>
         </button>
       </div>
 
-      {/* Zone des messages avec avatars */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-100/50">
+      {/* Zone des messages avec hauteur fixe et scroll */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gray-50 min-h-0">
         {messages.map((msg, index) => {
           if (msg.sender === 'system') {
-            const Icon = msg.icon || Lightbulb; // Icone par défaut si non fournie
+            const Icon = msg.icon || Lightbulb;
             return (
-              <div key={index} className="flex items-center justify-center gap-3 text-slate-500 text-xs animate-fade-in">
+              <div key={index} className="flex items-center justify-center gap-2 text-gray-500 text-xs">
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                <span className="bg-slate-200/80 px-3 py-1 rounded-full">{msg.text}</span>
-                <span>{msg.time}</span>
+                <span className="bg-white px-3 py-1.5 rounded-full border border-gray-200">{msg.text}</span>
+                <span className="text-gray-400">{msg.time}</span>
               </div>
             );
           }
           
           const isDoctor = msg.sender === 'doctor';
           return (
-            <div key={index} className={`flex items-end gap-3 ${isDoctor ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+            <div key={index} className={`flex items-end gap-2.5 ${isDoctor ? 'justify-end' : 'justify-start'}`}>
               {!isDoctor && (
-                  <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-slate-600" />
-                  </div>
+                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-gray-600" />
+                </div>
               )}
-              <div className={`max-w-[80%] rounded-2xl p-3 shadow-md ${
+              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
                 isDoctor
-                  ? 'bg-gradient-to-br from-primary to-blue-700 text-white rounded-br-lg'
-                  : 'bg-white text-slate-800 rounded-bl-lg'
+                  ? 'bg-[#052648] text-white rounded-br-sm'
+                  : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
               }`}>
                 <p className="text-sm leading-relaxed">{msg.text}</p>
-                <p className={`text-xs mt-2 text-right ${isDoctor ? 'text-blue-200/70' : 'text-slate-400'}`}>
+                <p className={`text-xs mt-1.5 ${isDoctor ? 'text-blue-200' : 'text-gray-400'}`}>
                   {msg.time}
                 </p>
               </div>
               {isDoctor && (
-                  <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <Stethoscope className="w-4 h-4 text-primary" />
-                  </div>
+                <div className="w-8 h-8 rounded-full bg-[#052648] flex items-center justify-center flex-shrink-0">
+                  <Stethoscope className="w-4 h-4 text-white" />
+                </div>
               )}
             </div>
           );
@@ -108,34 +109,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         
         {isGameOver && (
           <div className="text-center p-4 bg-red-50 text-red-700 rounded-xl border border-red-200">
-            <p className="font-semibold">Échec de la simulation !</p>
-            <p className="text-sm">Vous avez utilisé toutes vos questions.</p>
-            <button onClick={onReset} className="mt-2 text-sm text-blue-600 hover:underline">Recommencer un cas</button>
+            <p className="font-semibold text-sm">Simulation terminée</p>
+            <p className="text-xs mt-1">Vous avez utilisé toutes vos questions.</p>
+            <button onClick={onReset} className="mt-3 text-sm text-[#052648] hover:underline font-medium">
+              Recommencer un cas
+            </button>
           </div>
         )}
       </div>
 
-      {/* Zone de saisie avec visualisation des messages restants */}
-      <div className="p-4 border-t border-slate-200 bg-white flex-shrink-0">
-        <div className="mb-2 px-1">
-            <p className="text-xs text-slate-500 mb-1">Questions restantes: {questionsRemaining} / 5</p>
-            <div className="w-full bg-slate-200 rounded-full h-1.5">
-              <div 
-                className={`bg-gradient-to-r from-blue-400 to-primary h-1.5 rounded-full transition-all duration-500`} 
-                style={{width: `${progressBarWidth}%`}}>
-              </div>
+      {/* Zone de saisie épurée */}
+      <div className="p-4 border-t border-gray-100 bg-white flex-shrink-0">
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-600">Questions restantes</p>
+            <p className="text-xs font-semibold text-[#052648]">{questionsRemaining} / 5</p>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div 
+              className="bg-[#052648] h-2 rounded-full transition-all duration-500" 
+              style={{width: `${progressBarWidth}%`}}>
             </div>
+          </div>
         </div>
-        <div className="flex gap-3 items-center">
-          <input type="text" value={inputMessage}
+        
+        <div className="flex gap-2 items-center">
+          <input 
+            type="text" 
+            value={inputMessage}
             onChange={(e) => onInputChange(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && onSendMessage()}
-            placeholder={isGameOver ? "Limite de messages atteinte" : "Posez une question au patient..."}
+            onKeyPress={(e) => e.key === 'Enter' && !isGameOver && inputMessage.trim() && onSendMessage()}
+            placeholder={isGameOver ? "Limite atteinte" : "Posez une question au patient..."}
             disabled={isGameOver}
-            className="flex-1 w-full px-4 py-2.5 bg-slate-100 rounded-xl border-2 border-transparent focus:border-blue-500 focus:bg-white focus:outline-none transition-all duration-300 disabled:bg-slate-200 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-200 focus:border-[#052648] focus:bg-white focus:outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
           />
-          <button onClick={onSendMessage} disabled={isGameOver || !inputMessage.trim()}
-            className="p-3 bg-gradient-to-br from-primary to-blue-700 text-white rounded-full hover:scale-110 active:scale-95 transition-transform duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+          <button 
+            onClick={onSendMessage} 
+            disabled={isGameOver || !inputMessage.trim()}
+            className="p-2.5 bg-[#052648] text-white rounded-lg hover:bg-[#063a5f] active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#052648]">
             <Send className="w-5 h-5" />
           </button>
         </div>
@@ -143,5 +154,4 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     </div>
   );
 };
-
 export default ChatWindow;
