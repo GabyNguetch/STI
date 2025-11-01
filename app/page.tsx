@@ -184,7 +184,7 @@ export default function Home() {
               
               <div className="flex flex-col sm:flex-row gap-4">
                 <button className="group px-8 py-4 bg-[#052648] text-white rounded-lg font-semibold text-lg hover:bg-[#0a4d8f] transition-all shadow-lg hover:shadow-xl hover:scale-105 flex items-center justify-center gap-2">
-                  <Link href='/playground' >Jouer Maintenant</Link>
+                  <Link href='/simulation' >Jouer Maintenant</Link>
                   <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button className="px-8 py-4 bg-white border-2 border-[#052648] text-[#052648] rounded-lg font-semibold text-lg hover:bg-[#052648] hover:text-white transition-all flex items-center justify-center gap-2">
