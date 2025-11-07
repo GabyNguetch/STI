@@ -86,7 +86,7 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
           
           <div className="flex items-center gap-2 text-sm text-blue-300">
             <Stethoscope className="w-4 h-4" />
-            <span>Patient: {patientData.name}</span>
+            <span>Patient: {patientData.nom}</span>
           </div>
         </div>
       </div>

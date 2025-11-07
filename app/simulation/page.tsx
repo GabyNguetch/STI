@@ -26,11 +26,11 @@ const MedicalSimulationPage = () => {
   const diagnosticTools = useMemo(() => {
     if (!patientData) return [];
     return [
-      { name: 'Température', icon: Thermometer, key: 'temperature', patientValue: patientData.temperature },
-      { name: 'Pression Art.', icon: Gauge, key: 'pressionArterielle', patientValue: patientData.pressionArterielle },
-      { name: 'Saturation O2', icon: Wind, key: 'saturationOxygene', patientValue: patientData.saturationOxygene },
-      { name: 'Examen Clinique', icon: Stethoscope, key: 'examenClinique', patientValue: patientData.examenClinique },
-      { name: 'Biologie', icon: TestTube, key: 'analyseBiologique', patientValue: patientData.analyseBiologique },
+      { name: 'Température', icon: Thermometer, key: 'temperature' as keyof Patient, patientValue: patientData.temperature },
+      { name: 'Pression Art.', icon: Gauge, key: 'pressionArterielle' as keyof Patient, patientValue: patientData.pressionArterielle },
+      { name: 'Saturation O2', icon: Wind, key: 'saturationOxygene' as keyof Patient, patientValue: patientData.saturationOxygene },
+      { name: 'Examen Clinique', icon: Stethoscope, key: 'examenClinique' as keyof Patient, patientValue: patientData.examenClinique },
+      { name: 'Biologie', icon: TestTube, key: 'analyseBiologique' as keyof Patient, patientValue: patientData.analyseBiologique },
     ];
   }, [patientData]);
 

@@ -2,7 +2,7 @@ import { LucideProps } from 'lucide-react';
 import React from 'react';
 
 // Type pour une icône de lucide-react
-export type Icon = React.FC<LucideProps>;
+export type Icon = React.ForwardRefExoticComponent<Omit<LucideProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
 
 export interface Service {
   id: string;
