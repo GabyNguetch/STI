@@ -52,7 +52,7 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard title="Taux de Succès Global" value="78%" icon={TrendingUp} color="bg-green-500" />
                 <StatCard title="Score Moyen" value="82/100" icon={Target} color="bg-blue-500" />
-                <StatCard title="Cas "Hors-Piste" à Examiner" value={flaggedCases.length.toString()} icon={AlertTriangle} color="bg-red-500" />
+                <StatCard title="Cas 'Hors-Piste' à Examiner" value={flaggedCases.length.toString()} icon={AlertTriangle} color="bg-red-500" />
                 <StatCard title="Temps Moyen par Cas" value="18 min" icon={Clock} color="bg-yellow-500" />
             </div>
 

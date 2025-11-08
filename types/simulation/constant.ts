@@ -1,17 +1,8 @@
-<<<<<<< HEAD
 import { Heart, Baby, Ear, Brain, Eye, Bone, Wind, Activity, Droplet, Shield, Microscope, TestTube, Users, Thermometer, Syringe, CloudDrizzle } from 'lucide-react';
-import { Service, PatientsData, ClinicalExam } from '@/types/simulation/types';
+import { Service, PatientsData, UseCase, ClinicalExam } from '@/types/simulation/types';
 
 export const MAIN_COLOR = '#052648';
 
-=======
-// types/simulation/constant.ts
-
-import { Heart, Baby, Ear, Brain, Eye, Bone, Wind, Activity } from 'lucide-react';
-import { Service, UseCase } from './types';
-
-// La constante des services, utilisée pour les choix, les filtres et l'affichage des icônes/images
->>>>>>> e068468b2cc582900cd60ec519cfedc77d688c3e
 export const services: Service[] = [
   { id: 'cardio', name: 'Cardiologie', icon: Heart, bgImage: '/images/services/cardiologie.jpeg' },
   { id: 'pediatrie', name: 'Pédiatrie', icon: Baby, bgImage: '/images/services/pediatrie.jpeg' },
@@ -23,7 +14,6 @@ export const services: Service[] = [
   { id: 'urgence', name: 'Urgences', icon: Activity, bgImage: '/images/services/urgences.jpeg' },
 ];
 
-<<<<<<< HEAD
 export const difficultyLevels = ['Profane', 'Débutant', 'Intermédiaire', 'Confirmé', 'Expert'];
 
 export const patientsData: PatientsData = {
@@ -53,9 +43,6 @@ export const exampleExams: ClinicalExam[] = [
   { name: "Examen des selles", icon: CloudDrizzle, resultat: "Kystes d'amibes" },
   { name: "NFS (Numération Formule Sanguine)", icon: Thermometer, resultat: "Anémie légère" }
 ];
-=======
-// Les niveaux de difficulté disponibles dans l'application
-export const difficultyLevels = ['Profane', 'Débutant', 'Intermédiaire', 'Confirmé', 'Expert'];
 
 
 // NOUVELLE STRUCTURE : Un tableau de cas cliniques (Use Cases)
@@ -118,4 +105,4 @@ export const useCases: UseCase[] = [
     }
   }
 ];
->>>>>>> e068468b2cc582900cd60ec519cfedc77d688c3e
+

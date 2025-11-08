@@ -43,7 +43,6 @@ export interface DiagnosticTool {
     patientValue: string | number | undefined;
 }
 
-<<<<<<< HEAD
 export interface ClinicalExam {
   name: string;
   icon: React.ElementType; // Ou JSX.Element, selon votre configuration
@@ -51,7 +50,6 @@ export interface ClinicalExam {
 }
 
 
-=======
 // NOUVEAU TYPE : Représente un cas clinique complet et structuré
 export interface UseCase {
   id: string;
@@ -59,4 +57,3 @@ export interface UseCase {
   difficulty: 'Profane' | 'Débutant' | 'Intermédiaire' | 'Confirmé' | 'Expert';
   patient: Patient;
 }
->>>>>>> e068468b2cc582900cd60ec519cfedc77d688c3e
