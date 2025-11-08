@@ -1,11 +1,48 @@
 'use client';
 import React, { useState } from 'react';
-import { Menu, X, Brain, Users, Target, Award, Zap, TrendingUp, CheckCircle, ArrowRight, Stethoscope, BookOpen, BarChart3, Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Youtube, Play, Star, GraduationCap } from 'lucide-react';
+import { Menu, X, Brain, Users, Target, Award, Zap, TrendingUp, CheckCircle, ArrowRight, Stethoscope, BookOpen, BarChart3, Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Youtube, Play, Star, GraduationCap, User, Settings, LogOut, ChevronDown, Trophy, Heart } from 'lucide-react';
 import Link from 'next/link';
+import { UserProfile } from '@/types/user/profile';
 
 // Navbar Component
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeButton, setActiveButton] = useState<'connexion' | 'commencer' | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  // Simuler un utilisateur connecté (à remplacer par votre logique d'authentification)
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // false = non connecté par défaut
+  
+  // Profil de l'apprenant (simulé - à remplacer par les données réelles)
+  const userProfile: UserProfile = {
+    name: 'Dr. Elsa',
+    email: 'elsamiss@email.com',
+    level: 'student',
+    yearOfStudy: 3,
+    university: 'Université de Yaoundé',
+    specialty: 'Cardiologie',
+    areasOfInterest: ['Cardiologie', 'Médecine Interne', 'Neurologie'],
+    learningGoals: ['Préparation aux examens', 'Perfectionnement clinique'],
+    targetExam: 'ECN 2025',
+    practiceFrequency: 'daily',
+    difficultyPreference: 'intermediate',
+    preferredCaseTypes: ['Cas cliniques standards', 'Cas d\'urgence'],
+    totalCasesCompleted: 47,
+    averageScore: 85,
+    currentStreak: 12,
+    joinedDate: new Date('2024-01-15')
+  };
+  
+  const getLevelLabel = (level: string) => {
+    const labels: Record<string, string> = {
+      student: 'Étudiant',
+      intern: 'Interne',
+      resident: 'Résident',
+      doctor: 'Médecin',
+      specialist: 'Spécialiste'
+    };
+    return labels[level] || 'Étudiant';
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm z-50 shadow-sm">
@@ -26,12 +63,210 @@ function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center space-x-4">
-            <button className="px-5 py-2 text-[#052648] font-medium hover:text-[#0a4d8f] transition-colors">
-              Connexion
-            </button>
-            <button className="px-6 py-2.5 bg-[#052648] text-white rounded-lg font-medium hover:bg-[#0a4d8f] transition-all shadow-lg hover:shadow-xl">
-              Commencer
-            </button>
+            {!isLoggedIn && (
+              <>
+                <Link 
+                  href="/auth" 
+                  className="relative px-5 py-2 text-[#052648] font-medium hover:text-[#0a4d8f] transition-colors"
+                  onMouseEnter={() => setActiveButton('connexion')}
+                  onMouseLeave={() => setActiveButton(null)}
+                >
+                  Connexion
+                  {activeButton === 'connexion' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#052648] animate-slideIn" />
+                  )}
+                </Link>
+                <Link
+                  href="/simulation"
+                  className="relative px-6 py-2.5 bg-[#052648] text-white rounded-lg font-medium hover:bg-[#0a4d8f] transition-all shadow-lg hover:shadow-xl overflow-hidden"
+                  onMouseEnter={() => setActiveButton('commencer')}
+                  onMouseLeave={() => setActiveButton(null)}
+                >
+                  Commencer
+                  {activeButton === 'commencer' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-white/30 animate-slideIn" />
+                  )}
+                </Link>
+              </>
+            )}
+            
+            {/* Icône de profil utilisateur */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all border-2 border-transparent hover:border-[#052648]"
+              >
+                <User className="text-[#052648]" size={20} />
+              </button>
+
+              {/* Menu déroulant */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                  {isLoggedIn ? (
+                    <>
+                      {/* En-tête avec profil détaillé */}
+                      <div className="bg-gradient-to-br from-[#052648] to-[#0a4d8f] px-4 py-4 text-white">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center ring-2 ring-white/30">
+                            <User className="text-white" size={28} />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-bold text-base">{userProfile.name}</p>
+                            <p className="text-xs text-white/80">{getLevelLabel(userProfile.level)}</p>
+                            {userProfile.yearOfStudy && (
+                              <p className="text-xs text-white/70">{userProfile.yearOfStudy}ème année</p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Statistiques rapides */}
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2 py-2 text-center">
+                            <div className="text-lg font-bold">{userProfile.totalCasesCompleted}</div>
+                            <div className="text-[10px] text-white/80">Cas</div>
+                          </div>
+                          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2 py-2 text-center">
+                            <div className="text-lg font-bold">{userProfile.averageScore}%</div>
+                            <div className="text-[10px] text-white/80">Score</div>
+                          </div>
+                          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2 py-2 text-center">
+                            <div className="text-lg font-bold">{userProfile.currentStreak}</div>
+                            <div className="text-[10px] text-white/80">Jours</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Informations du profil */}
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                        <div className="space-y-2 text-xs">
+                          {userProfile.specialty && (
+                            <div className="flex items-center gap-2">
+                              <Heart size={14} className="text-[#052648]" />
+                              <span className="text-gray-700">{userProfile.specialty}</span>
+                            </div>
+                          )}
+                          {userProfile.university && (
+                            <div className="flex items-center gap-2">
+                              <GraduationCap size={14} className="text-[#052648]" />
+                              <span className="text-gray-700">{userProfile.university}</span>
+                            </div>
+                          )}
+                          {userProfile.targetExam && (
+                            <div className="flex items-center gap-2">
+                              <Target size={14} className="text-[#052648]" />
+                              <span className="text-gray-700">Objectif: {userProfile.targetExam}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Domaines d'intérêt */}
+                      {userProfile.areasOfInterest.length > 0 && (
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="text-xs font-semibold text-gray-500 mb-2">Domaines d'intérêt</p>
+                          <div className="flex flex-wrap gap-1">
+                            {userProfile.areasOfInterest.slice(0, 3).map((area, index) => (
+                              <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                                {area}
+                              </span>
+                            ))}
+                            {userProfile.areasOfInterest.length > 3 && (
+                              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
+                                +{userProfile.areasOfInterest.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Options du menu */}
+                      <div className="py-2">
+                        <Link
+                          href="/profile"
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <User size={18} className="text-[#052648]" />
+                          <span className="text-sm font-medium text-gray-700">Voir mon profil complet</span>
+                        </Link>
+                        
+                        <Link
+                          href="/simulation"
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <Stethoscope size={18} className="text-[#052648]" />
+                          <span className="text-sm font-medium text-gray-700">Mes simulations</span>
+                        </Link>
+                        
+                        <Link
+                          href="/profile?tab=stats"
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <BarChart3 size={18} className="text-[#052648]" />
+                          <span className="text-sm font-medium text-gray-700">Statistiques détaillées</span>
+                        </Link>
+                        
+                        <Link
+                          href="/profile?tab=preferences"
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <Settings size={18} className="text-[#052648]" />
+                          <span className="text-sm font-medium text-gray-700">Paramètres</span>
+                        </Link>
+                      </div>
+                      
+                      <div className="border-t border-gray-100 py-2">
+                        <button
+                          onClick={() => {
+                            setIsLoggedIn(false);
+                            setShowUserMenu(false);
+                          }}
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 transition-colors w-full text-left"
+                        >
+                          <LogOut size={18} className="text-red-600" />
+                          <span className="text-sm font-medium text-red-600">Déconnexion</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Menu pour utilisateur non connecté */}
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-semibold text-gray-900">Bienvenue !</p>
+                        <p className="text-xs text-gray-500">Connectez-vous pour accéder à votre profil</p>
+                      </div>
+                      
+                      <Link
+                        href="/auth"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <User size={18} className="text-[#052648]" />
+                        <span className="text-sm font-medium text-gray-700">Se connecter</span>
+                      </Link>
+                      
+                      <Link
+                        href="/auth"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <CheckCircle size={18} className="text-[#052648]" />
+                        <span className="text-sm font-medium text-gray-700">Créer un compte</span>
+                      </Link>
+                      
+                      <div className="px-4 py-3 bg-blue-50 mt-2">
+                        <p className="text-xs text-blue-800">
+                          Inscrivez-vous pour accéder à des centaines de cas cliniques !
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <button onClick={() => setIsOpen(!isOpen)} className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
@@ -48,9 +283,9 @@ function Navbar() {
             <a href="#avantages" className="block text-gray-700 hover:text-[#052648] transition-colors font-medium">Avantages</a>
             <a href="#contact" className="block text-gray-700 hover:text-[#052648] transition-colors font-medium">Contact</a>
             <div className="pt-4 space-y-2">
-              <button className="w-full px-5 py-2 text-[#052648] font-medium border border-[#052648] rounded-lg hover:bg-[#052648] hover:text-white transition-all">
+              <Link href="/auth" className="w-full px-5 py-2 text-[#052648] font-medium border border-[#052648] rounded-lg hover:bg-[#052648] hover:text-white transition-all flex items-center justify-center">
                 Connexion
-              </button>
+              </Link>
               <button className="w-full px-6 py-2.5 bg-[#052648] text-white rounded-lg font-medium hover:bg-[#0a4d8f] transition-all shadow-lg">
                 Commencer
               </button>
@@ -414,12 +649,26 @@ export default function Home() {
           0%, 100% { transform: translateY(0px) rotate(-6deg); }
           50% { transform: translateY(-10px) rotate(-6deg); }
         }
+        @keyframes slideIn {
+          from {
+            transform: scaleX(0);
+            opacity: 0;
+          }
+          to {
+            transform: scaleX(1);
+            opacity: 1;
+          }
+        }
         .animate-float {
           animation: float 3s ease-in-out infinite;
         }
         .animate-float-delayed {
           animation: float-delayed 3s ease-in-out infinite;
           animation-delay: 1.5s;
+        }
+        .animate-slideIn {
+          animation: slideIn 0.3s ease-out forwards;
+          transform-origin: left;
         }
         .bg-grid-pattern {
           background-image: radial-gradient(circle, #052648 1px, transparent 1px);
