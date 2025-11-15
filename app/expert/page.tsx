@@ -1,15 +1,20 @@
 // app/expert/page.tsx
 'use client';
 
-import React from 'react';
-import { ClipboardList, CheckCircle, Clock, TrendingUp, Eye, PlusCircle } from 'lucide-react'; 
+import React, { useState } from 'react'; // <-- Ajout de useState
+import { ClipboardList, CheckCircle, Clock, TrendingUp, Eye, PlusCircle, ArrowLeft } from 'lucide-react'; 
 import Link from 'next/link';
 import { useCases } from '@/contexts/CaseContext';
 import { services } from '@/types/simulation/constant';
 import { ExpertUseCase } from '@/types/expert/types';
 
+// Importez les composants que vous souhaitez afficher "en interne"
+import CreateCase from '@/components/expert/Create'; 
+import Analytics from '@/components/expert/Analytics';
+
 /**
  * Composant réutilisable pour afficher une carte de statistique sur le tableau de bord.
+ * (Inchangé)
  */
 const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: string, icon: React.FC<any>, color: string }) => (
     <div className="bg-white p-6 rounded-xl shadow-md flex items-center gap-4">
@@ -25,6 +30,7 @@ const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: s
 
 /**
  * Composant réutilisable pour afficher une ligne dans la liste des cas à valider.
+ * (Inchangé)
  */
 const PendingCaseRow = ({ useCase }: { useCase: ExpertUseCase }) => {
   const service = services.find(s => s.id === useCase.serviceId);
@@ -51,65 +57,117 @@ const PendingCaseRow = ({ useCase }: { useCase: ExpertUseCase }) => {
   );
 };
 
+// ==========================================================
+// DÉBUT DES MODIFICATIONS PRINCIPALES
+// ==========================================================
+
 /**
  * La page principale du tableau de bord de l'expert.
  * Affiche les statistiques clés et les actions prioritaires.
+ * Gère maintenant l'affichage de plusieurs vues.
  */
 export default function ExpertDashboardPage() {
+  // 1. Ajout de l'état pour gérer la vue active
+  const [activeView, setActiveView] = useState<'dashboard' | 'create' | 'analytics'>('dashboard');
   const { cases } = useCases();
 
-  // Calcul des statistiques à partir de l'état global
+  // Calcul des statistiques à partir de l'état global (uniquement pour la vue dashboard)
   const pendingCases = cases.filter(c => c.status === 'pending');
   const approvedCasesCount = cases.filter(c => c.status === 'approved').length;
+  
+  // 2. Fonction pour rendre le contenu en fonction de la vue active
+  const renderContent = () => {
+    switch (activeView) {
+      case 'create':
+        return <CreateCase />;
+      case 'analytics':
+        // NOTE: Le lien "Analytics" est dans le layout. Pour une meilleure expérience,
+        // l'état `activeView` devrait être géré dans un contexte partagé. 
+        // Voir la note à la fin de la réponse pour plus de détails.
+        return <Analytics />;
+      case 'dashboard':
+      default:
+        return (
+          <>
+            {/* Cartes de statistiques */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* On peut rendre une carte cliquable pour aller aux analyses */}
+                <div onClick={() => setActiveView('analytics')} className="cursor-pointer">
+                    <StatCard title="Taux de Succès (Étudiants)" value="82%" icon={TrendingUp} color="bg-green-500" />
+                </div>
+                <StatCard title="Cas Cliniques Total" value={cases.length.toString()} icon={ClipboardList} color="bg-blue-500" />
+                <StatCard title="Validations en Attente" value={pendingCases.length.toString()} icon={Clock} color="bg-yellow-500" />
+                <StatCard title="Cas Validés au total" value={approvedCasesCount.toString()} icon={CheckCircle} color="bg-primary" />
+            </div>
+
+            {/* Section des cas à valider */}
+            <div className="bg-white rounded-xl shadow-md">
+                <div className="p-6 border-b border-slate-200">
+                    <h2 className="text-xl font-bold text-primary">Cas Récents à Valider</h2>
+                    <p className="text-sm text-slate-500 mt-1">Examinez et approuvez les derniers cas générés par l'IA.</p>
+                </div>
+                <div className="p-4 space-y-2">
+                    <div className="grid grid-cols-5 gap-4 px-4 text-xs font-semibold text-slate-500 uppercase">
+                        <p className="col-span-2">Patient</p>
+                        <p>Difficulté</p>
+                        <p>Soumission</p>
+                        <p className="text-right">Action</p>
+                    </div>
+                    {pendingCases.length > 0 ? (
+                        pendingCases.slice(0, 5).map(c => <PendingCaseRow key={c.id} useCase={c} />)
+                    ) : (
+                        <p className="text-center text-slate-500 p-8">Aucun cas en attente de validation. Bravo !</p>
+                    )}
+                </div>
+                <div className="p-4 border-t border-slate-200 text-center">
+                    <Link href="/expert/validation" className="text-sm font-semibold text-primary hover:text-blue-700">
+                      Voir toute la file d'attente ({pendingCases.length})
+                    </Link>
+                </div>
+            </div>
+          </>
+        );
+    }
+  };
+  
+  // Titres dynamiques pour l'en-tête de page
+  const titles = {
+    dashboard: { title: "Tableau de Bord", subtitle: "Vue d'ensemble de l'activité de la plateforme de simulation." },
+    create: { title: "Créer un Nouveau Cas Clinique", subtitle: "Remplissez ce formulaire pour construire un cas personnalisé." },
+    analytics: { title: "Analyse des Performances", subtitle: "Suivez les résultats et identifiez les points d'amélioration." },
+  };
 
   return (
     <div className="space-y-8">
-      {/* En-tête de page avec titre et bouton d'action principal */}
+      {/* 3. En-tête de page dynamique */}
       <div className="flex items-center justify-between">
         <div>
-            <h1 className="text-3xl font-bold text-primary">Tableau de Bord</h1>
-            <p className="text-slate-600 mt-1">Vue d'ensemble de l'activité de la plateforme de simulation.</p>
+          {/* Le bouton "Retour" n'apparaît que si nous ne sommes pas sur le dashboard principal */}
+          {activeView !== 'dashboard' && (
+             <button 
+                onClick={() => setActiveView('dashboard')} 
+                className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-primary mb-2 transition-colors">
+                <ArrowLeft size={16}/>
+                Retour au Tableau de Bord
+            </button>
+          )}
+          <h1 className="text-3xl font-bold text-primary">{titles[activeView].title}</h1>
+          <p className="text-slate-600 mt-1">{titles[activeView].subtitle}</p>
         </div>
-        <Link href="/expert/creer" className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white font-semibold rounded-lg hover:bg-blue-800 transition-colors shadow-lg hover:shadow-xl">
-            <PlusCircle size={20}/>
-            Créer un Cas
-        </Link>
-      </div>
 
-      {/* Cartes de statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Cas Cliniques Total" value={cases.length.toString()} icon={ClipboardList} color="bg-blue-500" />
-        <StatCard title="Validations en Attente" value={pendingCases.length.toString()} icon={Clock} color="bg-yellow-500" />
-        <StatCard title="Taux de Succès (Étudiants)" value="82%" icon={TrendingUp} color="bg-green-500" />
-        <StatCard title="Cas Validés au total" value={approvedCasesCount.toString()} icon={CheckCircle} color="bg-primary" />
+        {/* Le bouton "Créer" n'est visible que sur le dashboard */}
+        {activeView === 'dashboard' && (
+          <button 
+              onClick={() => setActiveView('create')} // <-- MODIFIÉ: change l'état au lieu de naviguer
+              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white font-semibold rounded-lg hover:bg-blue-800 transition-colors shadow-lg hover:shadow-xl">
+              <PlusCircle size={20}/>
+              Créer un Cas
+          </button>
+        )}
       </div>
-
-      {/* Section des cas à valider */}
-      <div className="bg-white rounded-xl shadow-md">
-        <div className="p-6 border-b border-slate-200">
-            <h2 className="text-xl font-bold text-primary">Cas Récents à Valider</h2>
-            <p className="text-sm text-slate-500 mt-1">Examinez et approuvez les derniers cas générés par l'IA.</p>
-        </div>
-        <div className="p-4 space-y-2">
-            <div className="grid grid-cols-5 gap-4 px-4 text-xs font-semibold text-slate-500 uppercase">
-                <p className="col-span-2">Patient</p>
-                <p>Difficulté</p>
-                <p>Soumission</p>
-                <p className="text-right">Action</p>
-            </div>
-            {pendingCases.length > 0 ? (
-                // Affiche les 5 cas les plus récents ou moins s'il n'y en a pas 5
-                pendingCases.slice(0, 5).map(c => <PendingCaseRow key={c.id} useCase={c} />)
-            ) : (
-                <p className="text-center text-slate-500 p-8">Aucun cas en attente de validation. Bravo !</p>
-            )}
-        </div>
-        <div className="p-4 border-t border-slate-200 text-center">
-            <Link href="/expert/validation" className="text-sm font-semibold text-primary hover:text-blue-700">
-              Voir toute la file d'attente ({pendingCases.length})
-            </Link>
-        </div>
-      </div>
+      
+      {/* Affiche le contenu dynamique */}
+      {renderContent()}
     </div>
   );
 }

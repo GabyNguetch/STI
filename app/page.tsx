@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { Menu, X, Brain, Users, Target, Award, Zap, TrendingUp, CheckCircle, ArrowRight, Stethoscope, BookOpen, BarChart3, Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Youtube, Play, Star, GraduationCap, User, Settings, LogOut, ChevronDown, Trophy, Heart } from 'lucide-react';
+import { Menu, X, Brain, Users, Target, Award, Zap, TrendingUp, CheckCircle, ArrowRight, Stethoscope, BookOpen, BarChart3, Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Instagram, Youtube, Play, Star, GraduationCap, User, Settings, LogOut, ChevronDown, Trophy, Heart, LogIn, UserPlus, HeartPulse, UserRoundCog } from 'lucide-react';
 import Link from 'next/link';
 import { UserProfile } from '@/types/user/profile';
 
@@ -50,9 +50,9 @@ function Navbar() {
         <div className="flex justify-between items-center h-20">
           <div className="flex items-center space-x-2">
             <div className="w-10 h-10 bg-gradient-to-br from-[#052648] to-[#0a4d8f] rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">FT</span>
+              <HeartPulse className="text-white font-bold" size={24} />
             </div>
-            <span className="text-2xl font-bold text-[#052648]">FullTang</span>
+            <span className="text-2xl font-bold text-[#052648]">The Good Doctor</span>
           </div>
 
           <div className="hidden md:flex items-center space-x-8">
@@ -66,7 +66,7 @@ function Navbar() {
             {!isLoggedIn && (
               <>
                 <Link 
-                  href="/auth" 
+                  href="/connexion" 
                   className="relative px-5 py-2 text-[#052648] font-medium hover:text-[#0a4d8f] transition-colors"
                   onMouseEnter={() => setActiveButton('connexion')}
                   onMouseLeave={() => setActiveButton(null)}
@@ -77,7 +77,7 @@ function Navbar() {
                   )}
                 </Link>
                 <Link
-                  href="/simulation"
+                  href="/inscription"
                   className="relative px-6 py-2.5 bg-[#052648] text-white rounded-lg font-medium hover:bg-[#0a4d8f] transition-all shadow-lg hover:shadow-xl overflow-hidden"
                   onMouseEnter={() => setActiveButton('commencer')}
                   onMouseLeave={() => setActiveButton(null)}
@@ -92,180 +92,12 @@ function Navbar() {
             
             {/* Icône de profil utilisateur */}
             <div className="relative">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all border-2 border-transparent hover:border-[#052648]"
-              >
-                <User className="text-[#052648]" size={20} />
-              </button>
-
-              {/* Menu déroulant */}
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
-                  {isLoggedIn ? (
-                    <>
-                      {/* En-tête avec profil détaillé */}
-                      <div className="bg-gradient-to-br from-[#052648] to-[#0a4d8f] px-4 py-4 text-white">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center ring-2 ring-white/30">
-                            <User className="text-white" size={28} />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-bold text-base">{userProfile.name}</p>
-                            <p className="text-xs text-white/80">{getLevelLabel(userProfile.level)}</p>
-                            {userProfile.yearOfStudy && (
-                              <p className="text-xs text-white/70">{userProfile.yearOfStudy}ème année</p>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Statistiques rapides */}
-                        <div className="grid grid-cols-3 gap-2 mt-3">
-                          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2 py-2 text-center">
-                            <div className="text-lg font-bold">{userProfile.totalCasesCompleted}</div>
-                            <div className="text-[10px] text-white/80">Cas</div>
-                          </div>
-                          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2 py-2 text-center">
-                            <div className="text-lg font-bold">{userProfile.averageScore}%</div>
-                            <div className="text-[10px] text-white/80">Score</div>
-                          </div>
-                          <div className="bg-white/10 backdrop-blur-sm rounded-lg px-2 py-2 text-center">
-                            <div className="text-lg font-bold">{userProfile.currentStreak}</div>
-                            <div className="text-[10px] text-white/80">Jours</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Informations du profil */}
-                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                        <div className="space-y-2 text-xs">
-                          {userProfile.specialty && (
-                            <div className="flex items-center gap-2">
-                              <Heart size={14} className="text-[#052648]" />
-                              <span className="text-gray-700">{userProfile.specialty}</span>
-                            </div>
-                          )}
-                          {userProfile.university && (
-                            <div className="flex items-center gap-2">
-                              <GraduationCap size={14} className="text-[#052648]" />
-                              <span className="text-gray-700">{userProfile.university}</span>
-                            </div>
-                          )}
-                          {userProfile.targetExam && (
-                            <div className="flex items-center gap-2">
-                              <Target size={14} className="text-[#052648]" />
-                              <span className="text-gray-700">Objectif: {userProfile.targetExam}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Domaines d'intérêt */}
-                      {userProfile.areasOfInterest.length > 0 && (
-                        <div className="px-4 py-3 border-b border-gray-100">
-                          <p className="text-xs font-semibold text-gray-500 mb-2">Domaines d'intérêt</p>
-                          <div className="flex flex-wrap gap-1">
-                            {userProfile.areasOfInterest.slice(0, 3).map((area, index) => (
-                              <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                                {area}
-                              </span>
-                            ))}
-                            {userProfile.areasOfInterest.length > 3 && (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
-                                +{userProfile.areasOfInterest.length - 3}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Options du menu */}
-                      <div className="py-2">
-                        <Link
-                          href="/profile"
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <User size={18} className="text-[#052648]" />
-                          <span className="text-sm font-medium text-gray-700">Voir mon profil complet</span>
-                        </Link>
-                        
-                        <Link
-                          href="/simulation"
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <Stethoscope size={18} className="text-[#052648]" />
-                          <span className="text-sm font-medium text-gray-700">Mes simulations</span>
-                        </Link>
-                        
-                        <Link
-                          href="/profile?tab=stats"
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <BarChart3 size={18} className="text-[#052648]" />
-                          <span className="text-sm font-medium text-gray-700">Statistiques détaillées</span>
-                        </Link>
-                        
-                        <Link
-                          href="/profile?tab=preferences"
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <Settings size={18} className="text-[#052648]" />
-                          <span className="text-sm font-medium text-gray-700">Paramètres</span>
-                        </Link>
-                      </div>
-                      
-                      <div className="border-t border-gray-100 py-2">
-                        <button
-                          onClick={() => {
-                            setIsLoggedIn(false);
-                            setShowUserMenu(false);
-                          }}
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 transition-colors w-full text-left"
-                        >
-                          <LogOut size={18} className="text-red-600" />
-                          <span className="text-sm font-medium text-red-600">Déconnexion</span>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* Menu pour utilisateur non connecté */}
-                      <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-sm font-semibold text-gray-900">Bienvenue !</p>
-                        <p className="text-xs text-gray-500">Connectez-vous pour accéder à votre profil</p>
-                      </div>
-                      
-                      <Link
-                        href="/auth"
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                        onClick={() => setShowUserMenu(false)}
-                      >
-                        <User size={18} className="text-[#052648]" />
-                        <span className="text-sm font-medium text-gray-700">Se connecter</span>
-                      </Link>
-                      
-                      <Link
-                        href="/auth"
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                        onClick={() => setShowUserMenu(false)}
-                      >
-                        <CheckCircle size={18} className="text-[#052648]" />
-                        <span className="text-sm font-medium text-gray-700">Créer un compte</span>
-                      </Link>
-                      
-                      <div className="px-4 py-3 bg-blue-50 mt-2">
-                        <p className="text-xs text-blue-800">
-                          Inscrivez-vous pour accéder à des centaines de cas cliniques !
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+              <Link 
+                  href="/expert" 
+                  className="relative px-5 py-2 text-[#052648] font-medium hover:text-[#0a4d8f] transition-colors"
+                >
+                  <UserRoundCog size={24} />
+                </Link>
             </div>
           </div>
 
@@ -283,7 +115,7 @@ function Navbar() {
             <a href="#avantages" className="block text-gray-700 hover:text-[#052648] transition-colors font-medium">Avantages</a>
             <a href="#contact" className="block text-gray-700 hover:text-[#052648] transition-colors font-medium">Contact</a>
             <div className="pt-4 space-y-2">
-              <Link href="/auth" className="w-full px-5 py-2 text-[#052648] font-medium border border-[#052648] rounded-lg hover:bg-[#052648] hover:text-white transition-all flex items-center justify-center">
+              <Link href="/connexion" className="w-full px-5 py-2 text-[#052648] font-medium border border-[#052648] rounded-lg hover:bg-[#052648] hover:text-white transition-all flex items-center justify-center">
                 Connexion
               </Link>
               <button className="w-full px-6 py-2.5 bg-[#052648] text-white rounded-lg font-medium hover:bg-[#0a4d8f] transition-all shadow-lg">

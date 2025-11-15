@@ -1,120 +1,154 @@
 'use client';
-import React, { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, CheckCircle } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
-export default function Authentification() {
+import React, { useState } from 'react';
+import { Mail, Lock, UserPlus, Eye, EyeOff, HeartPulse, Star, Package, Users, UserRound } from 'lucide-react';
+import Link from 'next/link';
+import type { AuthResponse, User } from '@supabase/supabase-js'; // <-- Importer le type User
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
+import { signIn, signUp } from '@/services/authService';
+
+interface AuthFormProps {
+  mode: 'login' | 'register';
+  onSuccess?: (user: User) => void;
+}
+
+export default function AuthForm({ mode, onSuccess }: AuthFormProps) {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
+  const isLogin = mode === 'login';
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
+    name: '', // Utilisé pour l'inscription
     email: '',
     password: '',
     confirmPassword: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Logique d'authentification à implémenter
-    console.log('Form submitted:', formData);
-    
-    // Si c'est une inscription, rediriger vers l'onboarding
-    if (!isLogin) {
-      router.push('/onboarding');
-    } else {
-      // Si c'est une connexion, rediriger vers la simulation
-      router.push('/simulation');
-    }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    toast.dismiss();
+
+    const { name, email, password, confirmPassword } = formData;
+
+    if (!isLogin) {
+      if (!name.trim()) {
+        toast.error("Le nom complet est requis.");
+        setIsLoading(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast.error("Les mots de passe ne correspondent pas.");
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    try {
+      let response: AuthResponse;
+      if (isLogin) {
+        response = await signIn({ email, password });
+      } else {
+        response = await signUp({
+          email,
+          password,
+          options: {
+            data: {
+              username: name 
+            }
+          }
+        });
+      }
+      
+      if (response.error) { throw response.error; }
+
+      if (isLogin) {
+        toast.success('Connexion réussie ! Redirection...');
+        router.push('/dashboard');
+        router.refresh();
+      } else {
+        // MODIFIÉ : On vérifie que `response.data.user` existe et on le passe à `onSuccess`
+        if (onSuccess && response.data.user) {
+          toast.success('Compte créé ! Complétez votre profil.');
+          onSuccess(response.data.user); // On passe l'objet utilisateur au parent
+        } else {
+            throw new Error("Erreur: L'objet utilisateur n'a pas été retourné après l'inscription.");
+        }
+      }
+    } catch (error: any) {
+      console.error("Erreur d'authentification:", error);
+      let errorMessage = 'Une erreur est survenue. Veuillez réessayer.';
+      if (error.message.includes('Invalid login credentials')) {
+        errorMessage = 'Adresse email ou mot de passe incorrect.';
+      } else if (error.message.includes('User already registered')) {
+        errorMessage = 'Un utilisateur avec cet email existe déjà.';
+      } else if (error.message.includes('Password should be at least 6 characters')) {
+        errorMessage = 'Le mot de passe doit faire au moins 6 caractères.';
+      }
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center p-4">
-      {/* Bouton retour */}
-      <Link 
-        href="/" 
-        className="absolute top-6 left-6 flex items-center gap-2 text-[#052648] hover:text-[#0a4d8f] transition-colors font-medium"
-      >
-        <ArrowLeft size={20} />
-        <span>Retour à l'accueil</span>
-      </Link>
-
-      <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-8 items-center">
-        {/* Section gauche - Informations */}
-        <div className="hidden lg:block space-y-6 p-8">
-          <div className="flex items-center space-x-2 mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-[#052648] to-[#0a4d8f] rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">FT</span>
+      <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-48 items-center">
+        <div className="hidden lg:block bg-transparent">
+          {/* Logo et nom */}
+          <div className="flex flex-col items-center mb-12">
+            <div className="w-20 h-20 bg-gradient-to-br from-[#052648] to-[#0a4d8f] rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+              <Link href='/'><HeartPulse className='text-white h-10 w-10' /></Link> 
             </div>
-            <span className="text-3xl font-bold text-[#052648]">FullTang</span>
+            <span className="text-4xl font-bold text-[#052648] mb-2">FullTang</span>
+            <p className="text-gray-600 text-center text-lg">
+              Gérez votre formation médicale avec notre plateforme intuitive.
+            </p>
           </div>
 
-          <h1 className="text-4xl font-bold text-[#052648] leading-tight">
-            Rejoignez la Plateforme de Formation Médicale
-          </h1>
-          
-          <p className="text-lg text-gray-600">
-            Accédez à des centaines de cas cliniques et améliorez vos compétences diagnostiques.
-          </p>
+          {/* Tagline */}
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-semibold mb-2" style={{ color: '#082038ff' }}>
+              Simple • Sécurisé • Efficace
+            </h2>
+          </div>
 
-          <div className="space-y-4 pt-6">
-            {[
-              'Plus de 50 cas cliniques réalistes',
-              'Feedback instantané sur vos diagnostics',
-              'Suivi personnalisé de votre progression',
-              'Accès 24/7 depuis n\'importe quel appareil'
-            ].map((feature, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="text-green-600" size={16} />
-                </div>
-                <span className="text-gray-700">{feature}</span>
+          {/* Statistiques */}
+          <div className="grid grid-cols-3 gap-6">
+            <div className="bg-white rounded-2xl p-6 text-center shadow-md hover:shadow-lg transition-shadow">
+              <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Users className="text-teal-600" size={24} />
               </div>
-            ))}
+              <div className="text-3xl font-bold text-[#052648] mb-1">500+</div>
+              <div className="text-sm text-gray-600">Étudiants actifs</div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 text-center shadow-md hover:shadow-lg transition-shadow">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Package className="text-blue-600" size={24} />
+              </div>
+              <div className="text-3xl font-bold text-[#052648] mb-1">50+</div>
+              <div className="text-sm text-gray-600">Cas cliniques</div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 text-center shadow-md hover:shadow-lg transition-shadow">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <Star className="text-purple-600" size={24} />
+              </div>
+              <div className="text-3xl font-bold text-[#052648] mb-1">4.8/5</div>
+              <div className="text-sm text-gray-600">Satisfaction</div>
+            </div>
           </div>
         </div>
 
         {/* Section droite - Formulaire */}
         <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10">
-          {/* Toggle Login/Register */}
-          <div className="relative flex gap-2 mb-8 p-1 bg-gray-100 rounded-lg">
-            {/* Marqueur bleu animé */}
-            <div 
-              className={`absolute top-1 bottom-1 w-[calc(50%-0.25rem)] bg-[#052648] rounded-lg shadow-md transition-all duration-300 ease-in-out ${
-                isLogin ? 'left-1' : 'left-[calc(50%+0.25rem)]'
-              }`}
-            />
-            
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-300 relative z-10 ${
-                isLogin
-                  ? 'text-white'
-                  : 'text-gray-600 hover:text-[#052648]'
-              }`}
-            >
-              Connexion
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-300 relative z-10 ${
-                !isLogin
-                  ? 'text-white'
-                  : 'text-gray-600 hover:text-[#052648]'
-              }`}
-            >
-              Inscription
-            </button>
-          </div>
-
+          
           {/* Titre */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-[#052648] mb-2">
@@ -129,7 +163,7 @@ export default function Authentification() {
 
           {/* Formulaire */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Nom complet (uniquement pour inscription) */}
+            {/* AJOUT : Champ pour le nom complet, uniquement en mode inscription */}
             {!isLogin && (
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
@@ -137,7 +171,7 @@ export default function Authentification() {
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="text-gray-400" size={20} />
+                    <UserRound className="text-gray-400" size={20} />
                   </div>
                   <input
                     type="text"
@@ -146,13 +180,12 @@ export default function Authentification() {
                     value={formData.name}
                     onChange={handleInputChange}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#052648] focus:border-transparent transition-all outline-none"
-                    placeholder="Dr. Nanfah Elsa"
+                    placeholder="Ex: Jean Dupont"
                     required={!isLogin}
                   />
                 </div>
               </div>
             )}
-
             {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -285,12 +318,12 @@ export default function Authentification() {
           {/* Lien vers l'autre formulaire */}
           <p className="mt-8 text-center text-gray-600">
             {isLogin ? "Vous n'avez pas de compte ?" : 'Vous avez déjà un compte ?'}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
+            <Link
+              href={isLogin ? '/inscription' : '/connexion'}
               className="ml-2 text-[#052648] hover:text-[#0a4d8f] font-semibold"
             >
               {isLogin ? 'Inscrivez-vous' : 'Connectez-vous'}
-            </button>
+            </Link>
           </p>
         </div>
       </div>

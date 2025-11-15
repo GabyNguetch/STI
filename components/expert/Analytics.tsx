@@ -39,7 +39,7 @@ const flaggedCases = mockSessionLogs.filter(s => s.isFlagged);
 /**
  * La page principale d'analyse des performances.
  */
-export default function AnalyticsPage() {
+const Analytics: React.FC = () => {
     return (
         <div className="space-y-8">
             {/* En-tête de la page */}
@@ -100,3 +100,5 @@ export default function AnalyticsPage() {
         </div>
     );
 }
+
+export default Analytics;

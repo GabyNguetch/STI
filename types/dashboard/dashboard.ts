@@ -33,7 +33,7 @@ export interface DashboardData {
 }
 
 export interface NavItem {
-  id: 'overview' | 'journey' | 'redo' | 'settings';
+  id: 'overview' | 'journey' | 'redo' | 'settings'| 'lib';
   label: string;
   icon: LucideIcon;
 }

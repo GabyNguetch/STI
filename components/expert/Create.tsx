@@ -20,7 +20,7 @@ const FormField = ({ id, label, children }: { id: string, label: string, childre
 /**
  * La page permettant à un expert de créer un nouveau cas clinique manuellement.
  */
-export default function CreateCasePage() {
+const CreateCase: React.FC = () => {
     const router = useRouter();
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -133,3 +133,5 @@ export default function CreateCasePage() {
         </form>
     );
 }
+
+export default CreateCase ;
