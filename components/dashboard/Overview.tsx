@@ -1,10 +1,13 @@
-import React from 'react';
-import { CheckCircle2, Award, BarChart2, BriefcaseMedical } from 'lucide-react';
-import { Stats, ClinicalCase } from '@/types/dashboard';
+// components/dashboard/Overview.tsx
+'use client';
 
-// Sous-composant pour les cartes de statistiques
+import React from 'react';
+import { CheckCircle2, Award, BriefcaseMedical, TrendingUp, AlertCircle } from 'lucide-react';
+import { services } from '@/types/simulation/constant';
+
+// Le composant StatCard reste inchangé
 const StatCard: React.FC<{ icon: React.ElementType, title: string, value: string | number, color: string }> = ({ icon: Icon, title, value, color }) => (
-  <div className="bg-white p-6 rounded-xl border border-slate-200/80 flex items-center gap-5">
+  <div className="bg-white p-6 rounded-xl border border-slate-200/80 flex items-center gap-5 transition-transform hover:-translate-y-1">
     <div className={`w-12 h-12 rounded-lg flex items-center justify-center`} style={{ backgroundColor: `${color}1A` }}>
         <Icon size={24} style={{ color }}/>
     </div>
@@ -16,58 +19,70 @@ const StatCard: React.FC<{ icon: React.ElementType, title: string, value: string
 );
 
 interface OverviewProps {
-  stats: Stats;
-  cases: ClinicalCase[];
+  userProgress: any[];
 }
 
-const Overview: React.FC<OverviewProps> = ({ stats, cases }) => {
+const Overview: React.FC<OverviewProps> = ({ userProgress }) => {
+  
+  // --- CALCUL DES STATISTIQUES RÉELLES ---
+  
+  // 1. Nombre de cas lancés
+  const startedCasesCount = userProgress.length;
+
+  // 2. Cas complétés (ceux avec un statut 'completed')
+  const completedCases = userProgress.filter(p => p.status === 'completed' && p.score !== null);
+  const completedCasesCount = completedCases.length;
+
+  // 3. Moyenne des notes (uniquement sur les cas complétés)
+  const averageScore = completedCases.length > 0
+    ? Math.round(completedCases.reduce((acc, p) => acc + (p.score || 0), 0) / completedCases.length)
+    : 0;
+
+  // 4. Activité récente (les 3 derniers cas commencés)
+  const recentActivity = userProgress.slice(0, 3);
+
   return (
-    <div className="space-y-8">
-      {/* Cartes de statistiques */}
+    <div className="space-y-8 animate-fade-in-up">
+      {/* --- CARTES DE STATISTIQUES DYNAMIQUES --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <StatCard icon={BriefcaseMedical} title="Cas cliniques complétés" value={stats.casesCompleted} color="#052648" />
-        <StatCard icon={CheckCircle2} title="Taux de réussite" value={`${stats.successRate}%`} color="#22C55E" />
-        <StatCard icon={Award} title="Niveau actuel" value={stats.currentLevel} color="#F59E0B" />
+        <StatCard icon={BriefcaseMedical} title="Cas lancés" value={startedCasesCount} color="#052648" />
+        <StatCard icon={TrendingUp} title="Cas terminés" value={completedCasesCount} color="#F59E0B" />
+        <StatCard icon={CheckCircle2} title="Score moyen" value={averageScore > 0 ? `${averageScore}%` : '-'} color="#22C55E" />
       </div>
 
-      {/* Derniers cas cliniques */}
+      {/* --- ACTIVITÉ RÉCENTE DYNAMIQUE --- */}
       <div className="bg-white p-6 rounded-xl border border-slate-200/80">
         <h3 className="text-lg font-bold text-slate-800 mb-4">Activité Récente</h3>
         <div className="space-y-3">
-          {cases.slice(0, 3).map((caseItem) => (
-            <div key={caseItem.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50">
-              <div>
-                <p className="font-semibold text-slate-700">{caseItem.title}</p>
-                <p className="text-sm text-slate-500">{caseItem.specialty} · Terminé le {caseItem.dateCompleted}</p>
-              </div>
-              <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
-                  caseItem.status === 'réussi'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
-                }`}
-              >
-                {caseItem.status === 'réussi' ? `${caseItem.score}%` : 'À revoir'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Carte du parcours (simplifiée) */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200/80">
-         <h3 className="text-lg font-bold text-slate-800 mb-4">Votre Parcours</h3>
-         {/* Ceci est une représentation visuelle simple. Peut être remplacé par une librairie SVG ou de charting */}
-         <div className="relative flex items-center justify-between pt-6">
-            <div className="absolute top-8 left-0 right-0 h-1 bg-slate-200 w-full"></div>
-            {['Débutant', 'Interne', 'Confirmé', 'Expert'].map((level, index) => (
-                <div key={level} className="z-10 text-center">
-                    <div className={`w-6 h-6 rounded-full mx-auto flex items-center justify-center border-4 ${index <= 1 ? 'border-blue-700 bg-white' : 'border-slate-300 bg-slate-300'}`}>
-                       {index <= 1 && <div className="w-2.5 h-2.5 bg-blue-700 rounded-full"></div>}
-                    </div>
-                    <p className={`mt-2 text-sm font-semibold ${index <= 1 ? 'text-blue-700' : 'text-slate-500'}`}>{level}</p>
+          {recentActivity.length > 0 ? (
+            recentActivity.map((progress) => {
+              // Note : Supabase retourne 'clinical_cases' en snake_case
+              const caseInfo = progress.clinical_cases;
+              // Notre constante service utilise 'serviceId' en camelCase, donc il faut corriger ici
+              const serviceInfo = services.find(s => s.id === caseInfo.service_id); 
+              return (
+                <div key={caseInfo.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors">
+                  <div>
+                    <p className="font-semibold text-slate-700">{caseInfo.patient?.nom || 'Cas sans nom'}</p>
+                    <p className="text-sm text-slate-500">{serviceInfo?.name || 'Inconnu'} · Le {new Date(progress.started_at).toLocaleDateString('fr-FR')}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`px-2.5 py-1 text-xs font-semibold rounded-full capitalize ${progress.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {progress.status === 'started' ? 'En cours' : 'Terminé'}
+                    </span>
+                    {progress.score !== null && <p className="text-sm font-bold mt-1 text-slate-600">{progress.score} / 100</p>}
+                  </div>
                 </div>
-            ))}
-         </div>
+              );
+            })
+          ) : (
+             <div className="text-center py-8 text-slate-500">
+                <BriefcaseMedical className="mx-auto w-10 h-10 text-slate-400 mb-2"/>
+                <p className="font-medium">Aucune activité pour le moment.</p>
+                <p className="text-sm">Commencez un cas depuis la bibliothèque pour voir votre progression ici.</p>
+             </div>
+          )}
+        </div>
       </div>
     </div>
   );

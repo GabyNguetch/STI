@@ -1,7 +1,7 @@
 // components/simulation/ConsultationView.tsx
 'use client';
 import React, { useState } from 'react';
-import { Hospital, Lightbulb, Stethoscope, X } from 'lucide-react';
+import { Hospital, Lightbulb, Stethoscope, User, X } from 'lucide-react';
 import { Patient, Service, Message, DiagnosticTool, ClinicalExam } from '@/types/simulation/types';
 
 // Importation des sous-composants
@@ -9,6 +9,8 @@ import ChatWindow from './ChatWindow';
 import DiagnosticTools from './DiagnosticTools';
 import PatientInfoPanel from './PatientInfoPanel';
 import ClinicalExamsSidebar from './ClinicalExam';
+import { Button } from '../ui/Button';
+import Link from 'next/link';
 
 /**
  * Props pour le composant ConsultationView.
@@ -84,9 +86,10 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
             </div>
           </div>
           
-          <div className="flex items-center gap-2 text-sm text-blue-300">
+          <div className="flex items-center gap-8 text-sm text-blue-300">
             <Stethoscope className="w-4 h-4" />
             <span>Patient: {patientData.nom}</span>
+            <Button variant='default' className='flex items-center gap-2 text-sm'><Link href='/dashboard'>Mon compte</Link></Button>
           </div>
         </div>
       </div>

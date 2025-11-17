@@ -1,72 +1,91 @@
+// app/dashboard/page.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import Header from '@/components/dashboard/Header';
 import Overview from '@/components/dashboard/Overview';
 import Journey from '@/components/dashboard/Journey';
 import RedoExams from '@/components/dashboard/RedoExams';
 import Settings from '@/components/dashboard/Settings';
-import { MOCK_DASHBOARD_DATA } from '@/types/dashboard/mockData';
-import { NavItem } from '@/types/dashboard/dashboard';
-import { useRouter } from 'next/navigation'; // Importez useRouter pour la redirection
-import { useAuth } from '@/contexts/AuthContext'; // <-- LE HOOK MAGIQUE !
+import type { NavItem } from '@/types/dashboard/dashboard';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchCases, fetchUserProgress } from '@/services/caseService'; // <-- AJOUT
+import type { UseCase } from '@/types/simulation/types';
 import Library from '@/components/dashboard/Library';
+import DashboardSkeleton from '@/components/ui/SkeletonDashboard';// <-- IMPORTEZ LE SQUELETTE
+import toast from 'react-hot-toast';
+import { milestones as allMilestonesFromMock } from '@/types/dashboard/mockData';
 
 const DashboardPage = () => {
-  
   const router = useRouter();
-  const { user, profile, isLoading } = useAuth(); // <-- Récupération des données
-  // État pour suivre l'onglet actif, par défaut sur 'overview'
+  const { user, profile, isLoading: isAuthLoading } = useAuth();
+  
+  // États locaux pour nos données
   const [activeTab, setActiveTab] = useState<NavItem['id']>('overview');
+  const [allCases, setAllCases] = useState<UseCase[]>([]);
+  const [userProgress, setUserProgress] = useState<any[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
-    useEffect(() => {
-    // Si le chargement est terminé et qu'il n'y a pas d'utilisateur, on redirige vers la connexion.
-    if (!isLoading && !user) {
-      router.push('/connexion');
+  useEffect(() => {
+    if (!isAuthLoading) {
+      if (!user) {
+        router.push('/connexion');
+      } else {
+        // L'utilisateur est connecté, on charge ses données
+        const loadDashboardData = async () => {
+          try {
+            const [casesData, progressData] = await Promise.all([
+              fetchCases(),
+              fetchUserProgress(user.id)
+            ]);
+            setAllCases(casesData);
+            setUserProgress(progressData);
+          } catch (error) {
+            toast.error("Impossible de charger les données du tableau de bord.");
+          } finally {
+            setIsLoadingData(false);
+          }
+        };
+        loadDashboardData();
+      }
     }
-  }, [isLoading, user, router]);
-
-  // Affichez un état de chargement pendant que la session et le profil sont récupérés
-  if (isLoading || !profile || !user) {
-    return (
-        <div className="flex h-screen items-center justify-center">
-            <div className="text-xl font-semibold">Chargement du tableau de bord...</div>
-        </div>
-    );
+  }, [isAuthLoading, user, router]);
+  
+  if (isAuthLoading || isLoadingData || !profile || !user) {
+    return <DashboardSkeleton />; // <-- RENDRE LE SQUELETTE PENDANT LE CHARGEMENT
   }
-  // Les données seraient normalement récupérées ici via une API
-  const data = MOCK_DASHBOARD_DATA;
-
-  // Fonction pour afficher le bon composant en fonction de l'onglet actif
+  
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <Overview stats={data.stats} cases={data.cases} />;
-      case 'journey':
-        return <Journey />;
+        // On passe les données réelles et filtrées à Overview
+        return (
+            <Overview 
+                userProgress={userProgress}
+            />
+        );
       case 'redo':
-        return <RedoExams cases={data.cases} />;
+         // On passe les listes complètes pour que le composant fasse le calcul
+        return <RedoExams allCases={allCases} userProgress={userProgress} />;
       case 'settings':
         return <Settings user={user} profile={profile} />;
+      case 'journey':
+        return  <Journey allMilestones={allMilestonesFromMock} userProgress={userProgress} />;
       case 'lib':
-        return <Library />;
+        return <Library allCases={allCases} userProgress={userProgress} />;
       default:
-        return <Overview stats={data.stats} cases={data.cases} />;
+        return <Overview userProgress={userProgress}/>;
     }
   };
 
   return (
     <div className="flex h-screen bg-slate-100">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-      
       <div className="flex-1 flex flex-col overflow-hidden">
-       <Header profile={profile} /> 
-        
-        {/* La zone de contenu principal qui défile si nécessaire */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-8">
-          {renderContent()}
-        </main>
+        <Header profile={profile} /> 
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-8">{renderContent()}</main>
       </div>
     </div>
   );

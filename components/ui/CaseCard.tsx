@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardFooter } from '@/components/ui/Card';
 import type { UseCase, Service } from '@/types/simulation/types';
+import { startCaseForUser } from '@/services/caseService'; // <-- Importer la fonction
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
+import { useAuth } from '@/contexts/AuthContext'; // <-- AJOUT : Importer le hook d'authentification
+
 
 interface CaseCardProps {
   useCase: UseCase;
@@ -22,7 +27,28 @@ const difficultyStyles: Record<string, { bg: string, text: string, border: strin
 
 export function CaseCard({ useCase, service }: CaseCardProps) {
   const styles = difficultyStyles[useCase.difficulty] || difficultyStyles['Profane'];
+  const { user } = useAuth();
+  const router = useRouter(); // <-- Initialiser le routeur
+  const handleStartCase = async () => {
+    // AJOUT : Vérification pour s'assurer que l'utilisateur est bien connecté
+    if (!user) {
+        toast.error("Veuillez vous connecter pour lancer un cas.");
+        router.push('/connexion');
+        return;
+    }
 
+    const toastId = toast.loading("Lancement de la simulation...");
+    try {
+      // MODIFIÉ : On passe maintenant l'ID de l'utilisateur au service
+      await startCaseForUser(useCase.id, user.id);
+      
+      router.push(`/simulation?caseId=${useCase.id}`);
+      toast.dismiss(toastId);
+    } catch (error) {
+      toast.error("Impossible de lancer le cas. Réessayez.", { id: toastId });
+      console.error(error);
+    }
+  };
   return (
     <>
       {/* ✨ AMÉLIORATION : Balise <style> pour les animations personnalisées sans config tailwind */}
@@ -88,23 +114,14 @@ export function CaseCard({ useCase, service }: CaseCardProps) {
 
           {/* ✨ AMÉLIORATION : CTA avec dégradé, animation et effet de brillance */}
           <CardFooter className="p-4 mt-auto">
-            <Link 
-              href={`/simulation?caseId=${useCase.id}`} 
-              className="
-                relative group/button w-full h-12 flex items-center justify-center gap-2 text-base font-bold text-white 
-                rounded-lg shadow-lg overflow-hidden
-                bg-gradient-to-br from-[#052648] to-[#0a4d8f]
-                transition-all duration-300 ease-out 
-                hover:from-[#0a4d8f] hover:to-[#052648]
-                hover:shadow-xl active:scale-95 transform
-              "
-            >
-              {/* Effet de brillance animé via la balise <style> */}
-              <div className="animate-shine-on-hover absolute top-0 -left-full w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
-              <span className="z-10">Lancer le cas</span>
-              <ArrowRight className="z-10 w-5 h-5 transition-transform duration-300 group-hover/button:translate-x-1" />
-            </Link>
+                    {/* MODIFIÉ : <Link> est remplacé par <button> */}
+                    <button 
+                        onClick={handleStartCase}
+                        className="relative group/button w-full h-12 flex items-center justify-center gap-2 text-base font-bold text-white rounded-lg shadow-lg overflow-hidden bg-gradient-to-br from-[#052648] to-[#0a4d8f] transition-all duration-300 ease-out hover:from-[#0a4d8f] hover:to-[#052648] hover:shadow-xl active:scale-95 transform"
+                    >
+                        <span className="z-10">Lancer le cas</span>
+                        <ArrowRight className="z-10 w-5 h-5 transition-transform duration-300 group-hover/button:translate-x-1" />
+                    </button>
           </CardFooter>
         </Card>
       </div>
