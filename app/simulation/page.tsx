@@ -1,7 +1,7 @@
 // app/simulation/page.tsx
 'use client';
 import React, { useState, useMemo, useEffect } from 'react';
-import { Stethoscope, X, Lightbulb, Thermometer, Gauge, Wind, TestTube } from 'lucide-react';
+import { Stethoscope, X, Lightbulb, Thermometer, Gauge, Wind, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
 
 // Importations des nouvelles structures
@@ -9,8 +9,10 @@ import HomeView from '@/components/simulation/HomeView';
 import PatientInfoView from '@/components/simulation/PatientInfoView';
 import ConsultationView from '@/components/simulation/ConsultationView';
 import { services, patientsData } from '@/types/simulation/constant';
-import { Patient, Service, Message, Icon } from '@/types/simulation/types';
+import { Patient, Service, Message, Icon, ClinicalExam } from '@/types/simulation/types';
 import { exampleExams } from '@/types/simulation/constant';
+import { GameState } from '@/types/simulation/types';
+
 
 const MedicalSimulationPage = () => {
   const [currentView, setCurrentView] = useState('home');
@@ -20,8 +22,15 @@ const MedicalSimulationPage = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [difficulty, setDifficulty] = useState('Profane');
   const [messageCount, setMessageCount] = useState(0);
+  // --- NOUVEAUX ÉTATS ---
+  const [gameState, setGameState] = useState<GameState>('asking');
+  const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+  const [selectedExam, setSelectedExam] = useState<ClinicalExam | null>(null);
+  const [isDrugModalOpen, setIsDrugModalOpen] = useState(false); // Pour le modal de traitement
+  
+   // Modifié : la partie est terminée seulement quand l'état est 'finished'
+  const isGameOver = gameState === 'finished'; 
 
-  const isGameOver = messageCount >= 5;
 
   const diagnosticTools = useMemo(() => {
     if (!patientData) return [];
@@ -72,21 +81,76 @@ const MedicalSimulationPage = () => {
     ]);
   };
 
+  // --- MISE À JOUR MAJEURE de la fonction sendMessage ---
   const sendMessage = () => {
     if (!inputMessage.trim() || isGameOver) return;
-    const newMessage = {
-      sender: 'doctor' as const, text: inputMessage,
+
+    const newMessage: Message = {
+      sender: 'doctor', text: inputMessage,
       time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
     };
-    setMessageCount(prev => prev + 1);
+
     setMessages(prev => [...prev, newMessage]);
     setInputMessage('');
     
+    // CAS 1: Phase de diagnostic
+    if (gameState === 'diagnosing' && patientData) {
+        const userDiagnosis = inputMessage.trim().toLowerCase();
+        const correctDiagnosis = patientData.diagnostic.toLowerCase();
+        
+        if (userDiagnosis.includes(correctDiagnosis)) {
+            addSystemMessage(`Félicitations ! Le diagnostic de "${patientData.diagnostic}" est correct.`, CheckCircle);
+            setGameState('treating'); // Passe à l'étape du traitement
+        } else {
+            addSystemMessage(`Échec. Le diagnostic correct était : "${patientData.diagnostic}".`, XCircle);
+            setGameState('finished'); // Fin de la simulation
+        }
+        return;
+    }
+    
+    // CAS 2: Phase de questionnement
+    setMessageCount(prev => prev + 1);
+    
+    // Simuler la réponse du patient
     setTimeout(() => {
-      const responses = ["Oui docteur, exactement.", "Ça a commencé il y a quelques jours...", "Non, je n'ai pas d'autres symptômes.", "La douleur est vraiment intense."];
-      const patientResponse = { sender: 'patient' as const, text: responses[Math.floor(Math.random() * responses.length)], time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
-      setMessages(prev => [...prev, patientResponse]);
+        const patientSpecificResponses = patientData?.specificResponses || [];
+        const genericResponses = ["Oui docteur, exactement.", "Ça a commencé il y a quelques jours...", "Non, je n'ai pas d'autres symptômes.", "La douleur est vraiment intense."];
+        // Prioriser les réponses spécifiques si disponibles
+        const responsePool = patientSpecificResponses.length > 0 ? patientSpecificResponses : genericResponses;
+        const patientResponseText = responsePool[Math.floor(Math.random() * responsePool.length)];
+      
+        const patientResponse: Message = { 
+            sender: 'patient', 
+            text: patientResponseText, 
+            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) 
+        };
+        
+        setMessages(prev => [...prev, patientResponse]);
+        
+        // --- Vérifier si on passe en mode diagnostic ---
+        if (messageCount + 1 >= 5) {
+             setTimeout(() => {
+                addSystemMessage("Vous avez posé toutes vos questions. Quel est votre diagnostic final ?");
+                setGameState('diagnosing');
+            }, 1000); // Léger délai pour la lisibilité
+        }
+
     }, 1500);
+  }
+
+  // --- NOUVELLES FONCTIONS DE GESTION DU MODAL ---
+  const handleExamClick = (exam: ClinicalExam) => {
+    setSelectedExam(exam);
+    setIsExamModalOpen(true);
+  };
+  const handleCloseExamModal = () => {
+    setIsExamModalOpen(false);
+    setSelectedExam(null);
+  };
+  
+  const handlePrescribeExam = (exam: ClinicalExam) => {
+    addSystemMessage(`Résultat - ${exam.name}: ${exam.resultat}`, exam.icon as Icon);
+    handleCloseExamModal(); // Important: fermer le modal après la prescription
   };
 
   const resetSimulation = () => {
@@ -97,6 +161,16 @@ const MedicalSimulationPage = () => {
     setInputMessage('');
     setMessageCount(0);
   };
+
+    // --- NOUVELLES FONCTIONS POUR LE MODAL DE TRAITEMENT ---
+  const handleOpenDrugModal = () => setIsDrugModalOpen(true);
+  const handleCloseDrugModal = () => setIsDrugModalOpen(false);
+  const handleFinalPrescription = () => {
+    addSystemMessage("Traitement prescrit avec succès. Le cas est maintenant terminé.");
+    setGameState('finished');
+    handleCloseDrugModal();
+  };
+  
   
   // --- RENDU ---
   
@@ -123,6 +197,19 @@ const MedicalSimulationPage = () => {
                 clinicalExams={exampleExams} 
                 isGameOver={isGameOver}
                 onReset={resetSimulation}
+                // --- ON PASSE L'ÉTAT ET LES FONCTIONS AU COMPOSANT ENFANT ---
+                isExamModalOpen={isExamModalOpen}
+                selectedExam={selectedExam}
+                onExamClick={handleExamClick}
+                onCloseExamModal={handleCloseExamModal}
+                onPrescribeExam={handlePrescribeExam}
+
+                          // --- AJOUTS POUR LE NOUVEAU FLUX ---
+                gameState={gameState}
+                isDrugModalOpen={isDrugModalOpen}
+                onOpenDrugModal={handleOpenDrugModal}
+                onCloseDrugModal={handleCloseDrugModal}
+                onFinalPrescription={handleFinalPrescription}
               />
             );
         }

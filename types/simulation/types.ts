@@ -25,7 +25,11 @@ export interface Patient {
   examenClinique: string;
   analyseBiologique: string;
   diagnostic: string;
+  specificResponses?: string[]; // <--- AJOUTER CETTE LIGNE
 }
+
+// --- AJOUT : Type pour l'état du jeu ---
+export type GameState = 'asking' | 'diagnosing' | 'treating' | 'finished';
 
 export type PatientsData = Record<string, Patient>;
 

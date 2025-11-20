@@ -21,13 +21,27 @@ export const patientsData: PatientsData = {
     nom: 'M. Kamdem Jean', age: 58, sexe: 'Masculin', motif: 'Douleur thoracique et essoufflement', antecedents: 'Hypertension artérielle, tabagisme', symptomes: 'Douleur oppressive rétrosternale irradiant vers le bras gauche, dyspnée, sueurs',
     signesVitaux: 'TA: 160/95 mmHg, FC: 98 bpm, FR: 22/min, SpO2: 94%',
     temperature: '37.1°C', pressionArterielle: '160/95 mmHg', saturationOxygene: '94%', examenClinique: 'Ausculation cardiaque: Bruits du cœur réguliers, pas de souffle. Auscultation pulmonaire: murmure vésiculaire conservé.', analyseBiologique: 'Troponine élevée.',
-    diagnostic: 'Syndrome coronarien aigu'
+    diagnostic: 'Syndrome coronarien aigu',
+     // --- AJOUT ---
+    specificResponses: [
+        "La douleur est comme un poids très lourd sur ma poitrine.",
+        "Oui, ça me lance dans le bras gauche et la mâchoire.",
+        "J'ai du mal à respirer, comme si je manquais d'air.",
+        "Non docteur, je n'ai jamais eu ça avant."
+    ]
   },
   pediatrie: {
     nom: 'Bébé Ngo\'o Marie', age: 2, sexe: 'Féminin', motif: 'Fièvre et difficultés respiratoires', antecedents: 'Prématurée, vaccination à jour', symptomes: 'Fièvre 39.5°C, toux productive, geignement expiratoire, tirage intercostal',
     signesVitaux: 'T: 39.5°C, FC: 145 bpm, FR: 55/min, SpO2: 89%',
     temperature: '39.5°C', pressionArterielle: '90/60 mmHg', saturationOxygene: '89%', examenClinique: 'Râles crépitants à l\'auscultation du poumon droit.', analyseBiologique: 'Hyperleucocytose à polynucléaires neutrophiles.',
-    diagnostic: 'Pneumonie aiguë'
+    diagnostic: 'Pneumonie aiguë',
+     // --- AJOUT ---
+    specificResponses: [
+        "Elle tousse beaucoup, surtout la nuit.",
+        "Sa respiration est très rapide, ça me fait peur.",
+        "Elle ne veut plus manger depuis ce matin.",
+        "Oui, son corps est très chaud."
+    ]
   },
   // ... autres patients
 };

@@ -1,7 +1,7 @@
 // components/simulation/ConsultationView.tsx
 'use client';
 import React, { useState } from 'react';
-import { Hospital, Lightbulb, Stethoscope, User, X } from 'lucide-react';
+import { Hospital, Lightbulb, Stethoscope, Syringe, User, X } from 'lucide-react';
 import { Patient, Service, Message, DiagnosticTool, ClinicalExam } from '@/types/simulation/types';
 
 // Importation des sous-composants
@@ -9,8 +9,13 @@ import ChatWindow from './ChatWindow';
 import DiagnosticTools from './DiagnosticTools';
 import PatientInfoPanel from './PatientInfoPanel';
 import ClinicalExamsSidebar from './ClinicalExam';
+import ExamPrescriptionModal from './ExamPres'; // Importation du nouveau modal
 import { Button } from '../ui/Button';
 import Link from 'next/link';
+import DrugPrescriptionModal from './Drug';
+
+// Type pour l'état du jeu, reçu du parent
+type GameState = 'asking' | 'diagnosing' | 'treating' | 'finished';
 
 /**
  * Props pour le composant ConsultationView.
@@ -28,9 +33,22 @@ interface ConsultationViewProps {
   clinicalExams: ClinicalExam[];
   isGameOver: boolean;
   onReset: () => void;
+    // --- Props reçues du parent pour gérer le modal ---
+  isExamModalOpen: boolean;
+  selectedExam: ClinicalExam | null;
+  onExamClick: (exam: ClinicalExam) => void;
+  onCloseExamModal: () => void;
+  onPrescribeExam: (exam: ClinicalExam) => void; 
   currentHint?: string;
   remainingHints?: number;
   onRequestHint?: () => void;
+
+    // --- NOUVELLES PROPS ---
+  gameState: GameState;
+  isDrugModalOpen: boolean;
+  onOpenDrugModal: () => void;
+  onCloseDrugModal: () => void;
+  onFinalPrescription: () => void;
 }
 
 /**
@@ -50,13 +68,18 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
   clinicalExams, 
   isGameOver,
   onReset,
+  isExamModalOpen,
+  selectedExam,
+  onExamClick,
+  onCloseExamModal,
+  onPrescribeExam,
+  gameState, isDrugModalOpen, onOpenDrugModal, onCloseDrugModal, onFinalPrescription,
   currentHint = '',
   remainingHints = 3,
   onRequestHint,
 }) => {
   const [isPatientPanelVisible, setPatientPanelVisible] = useState(false);
   const [showHintBubble, setShowHintBubble] = useState(false);
-
   const handleHintClick = () => {
     if (remainingHints > 0 && onRequestHint) {
       onRequestHint();
@@ -67,6 +90,8 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
   const closeHintBubble = () => {
     setShowHintBubble(false);
   };
+
+
   return (
     <div className="fixed inset-0 flex flex-col bg-[#052648]">
       
@@ -100,7 +125,7 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
         {/* COLONNE GAUCHE : Examens Cliniques */}
         <div className="hidden lg:flex flex-col w-64 xl:w-72 bg-blue-950/50 backdrop-blur-sm border-r border-blue-700/30">
           <div className="flex-1 overflow-hidden">
-            <ClinicalExamsSidebar exams={clinicalExams} />
+            <ClinicalExamsSidebar exams={clinicalExams} onExamClick={onExamClick} />
           </div>
         </div>
 
@@ -119,6 +144,15 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
               onReset={onReset}
               onShowPatientInfo={() => setPatientPanelVisible(true)}
             />
+             {/* --- AJOUT : Bouton pour prescrire le traitement --- */}
+            {gameState === 'treating' && (
+                <div className="mt-4 text-center animate-fade-in-up">
+                    <Button onClick={onOpenDrugModal} size="lg">
+                       <Syringe size={18} className="mr-2"/>
+                       Prescrire un traitement
+                    </Button>
+                </div>
+            )}
           </div>
         </div>
 
@@ -206,6 +240,22 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
           onClose={() => setPatientPanelVisible(false)}
         />
       )}
+          {/* NOUVEAU : Le rendu du modal est contrôlé par les props du parent */}
+      <ExamPrescriptionModal
+          isOpen={isExamModalOpen}
+          onClose={onCloseExamModal}
+          exam={selectedExam}
+          patient={patientData}
+          onPrescribe={onPrescribeExam}
+      />
+            {/* --- AJOUT : Rendu du modal de prescription de traitement --- */}
+      <DrugPrescriptionModal
+          isOpen={isDrugModalOpen}
+          onClose={onCloseDrugModal}
+          patient={patientData}
+          diagnosis={patientData.diagnostic}
+          onPrescribe={onFinalPrescription}
+      />
     </div>
   );
 };
