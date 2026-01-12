@@ -69,7 +69,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       if (isLogin) {
         toast.success('Connexion réussie ! Redirection...');
-        router.push('/dashboard');
+        router.push('/simulation');
         router.refresh();
       } else {
         // MODIFIÉ : On vérifie que `response.data.user` existe et on le passe à `onSuccess`

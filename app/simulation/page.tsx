@@ -1,318 +1,489 @@
 // app/simulation/page.tsx
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
-import { Stethoscope, X, Lightbulb, Thermometer, Gauge, Wind, TestTube, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Stethoscope, X, Lightbulb, Thermometer, Gauge, Wind, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-// Importations des nouvelles structures
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchClinicalCase } from '@/services/SimulationService';
+import { services } from '@/types/simulation/constant';
+import { Patient, Service, Message, ClinicalExam, GameResult, GameState } from '@/types/simulation/types';
+import { exampleExams } from '@/types/simulation/constant';
+import { PROFANITY_LIST } from '@/types/simulation/grosmot';
+
 import HomeView from '@/components/simulation/HomeView';
 import PatientInfoView from '@/components/simulation/PatientInfoView';
 import ConsultationView from '@/components/simulation/ConsultationView';
-import { services, patientsData } from '@/types/simulation/constant';
-import { Patient, Service, Message, Icon, ClinicalExam } from '@/types/simulation/types';
-import { exampleExams } from '@/types/simulation/constant';
-import { GameState } from '@/types/simulation/types';
-
 
 const MedicalSimulationPage = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, isLoading: isAuthLoading } = useAuth();
+
+  // --- CONFIG SCENARIO ---
+  const [caseSequenceId, setCaseSequenceId] = useState(1040); // Départ demandé 1040
+  const TUTOR_LIMIT = 5;  // Phase tutorée
+  const MAX_QUESTIONS = 10; // Phase libre
+
+  // --- ÉTATS GLOBAUX ---
   const [currentView, setCurrentView] = useState('home');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const [patientData, setPatientData] = useState<Patient | null>(null);
+  
+  // États Chat
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [difficulty, setDifficulty] = useState('Profane');
-  const [messageCount, setMessageCount] = useState(0);
-  // --- NOUVEAUX ÉTATS ---
+  const [isTyping, setIsTyping] = useState(false);
+  const [questionsCount, setQuestionsCount] = useState(0); // Docteur -> Patient seulement
+  
+  // États Jeu
   const [gameState, setGameState] = useState<GameState>('asking');
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const MAX_HINTS = 3;
+  const [userDiagnosis, setUserDiagnosis] = useState('');
+  const [finalResult, setFinalResult] = useState<GameResult | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+
+  // Modales
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<ClinicalExam | null>(null);
-  const [isDrugModalOpen, setIsDrugModalOpen] = useState(false); // Pour le modal de traitement
-  
-   // Modifié : la partie est terminée seulement quand l'état est 'finished'
-  const isGameOver = gameState === 'finished'; 
+  const [isDrugModalOpen, setIsDrugModalOpen] = useState(false); 
 
-
-  const diagnosticTools = useMemo(() => {
-    if (!patientData) return [];
-    return [
-      { name: 'Température', icon: Thermometer, key: 'temperature' as keyof Patient, patientValue: patientData.temperature },
-      { name: 'Pression Art.', icon: Gauge, key: 'pressionArterielle' as keyof Patient, patientValue: patientData.pressionArterielle },
-      { name: 'Saturation O2', icon: Wind, key: 'saturationOxygene' as keyof Patient, patientValue: patientData.saturationOxygene },
-      { name: 'Examen Clinique', icon: Stethoscope, key: 'examenClinique' as keyof Patient, patientValue: patientData.examenClinique },
-      { name: 'Biologie', icon: TestTube, key: 'analyseBiologique' as keyof Patient, patientValue: patientData.analyseBiologique },
-    ];
-  }, [patientData]);
-
-  // --- LOGIQUE (Handlers) ---
-
-  const handleServiceSelect = (service: Service) => {
-    setSelectedService(service);
-    setPatientData(patientsData[service.id] || Object.values(patientsData)[0]);
-    setCurrentView('patientInfo');
-  };
-
-  const handleRandomCase = () => {
-    const randomService = services[Math.floor(Math.random() * services.length)];
-    handleServiceSelect(randomService);
-  };
-  
-  const addSystemMessage = (text: string, icon: Icon = Lightbulb) => {
-    const systemMessage: Message = {
-      sender: 'system', text, icon,
-      time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-    };
-    setMessages(prev => [...prev, systemMessage]);
-  };
-
-  const handleToolClick = (tool: { name: string, patientValue: string | number | undefined, icon: Icon }) => {
-    if (tool.patientValue) {
-      addSystemMessage(`${tool.name} : ${tool.patientValue}`, tool.icon);
-    } else {
-      addSystemMessage(`Donnée non disponible pour : ${tool.name}`, Lightbulb);
+  // Protection Route
+  useEffect(() => {
+    if (!isAuthLoading && !user && currentView !== 'home') {
+      toast.error("Connexion requise.");
+      router.push('/connexion');
     }
-  };
+  }, [user, isAuthLoading, router, currentView]);
 
-  const startConsultation = () => {
-    if (!patientData) return;
-    setCurrentView('consultation');
-    setMessages([
-      { sender: 'patient', text: `Bonjour docteur. ${patientData.motif}.`, 
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
-    ]);
-  };
+  // Si on reçoit un caseId via URL (dashboard), on peut l'utiliser, sinon on force la logique séquentielle
+  useEffect(() => {
+      const urlId = searchParams.get('caseId');
+      if(urlId) setCaseSequenceId(parseInt(urlId));
+  }, [searchParams]);
 
-  // --- MISE À JOUR MAJEURE de la fonction sendMessage ---
-  const sendMessage = () => {
-    if (!inputMessage.trim() || isGameOver) return;
+  // --- 1. DÉMARRAGE DU CAS ---
+  const handleServiceSelect = async (service: Service) => {
+    if (!user) { router.push('/connexion'); return; }
 
-    const newMessage: Message = {
-      sender: 'doctor', text: inputMessage,
-      time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-    setInputMessage('');
+    setIsLoading(true);
+    toast.loading(`Chargement Cas N°${caseSequenceId}...`, { id: 'loadCase' });
     
-    // CAS 1: Phase de diagnostic
-    if (gameState === 'diagnosing' && patientData) {
-        const userDiagnosis = inputMessage.trim().toLowerCase();
-        const correctDiagnosis = patientData.diagnostic.toLowerCase();
+    try {
+        setSelectedService(service);
         
-        if (userDiagnosis.includes(correctDiagnosis)) {
-            addSystemMessage(`Félicitations ! Le diagnostic de "${patientData.diagnostic}" est correct.`, CheckCircle);
-            setGameState('treating'); // Passe à l'étape du traitement
-        } else {
-            addSystemMessage(`Échec. Le diagnostic correct était : "${patientData.diagnostic}".`, XCircle);
-            setGameState('finished'); // Fin de la simulation
-        }
-        return;
-    }
-    
-    // CAS 2: Phase de questionnement
-    setMessageCount(prev => prev + 1);
-    
-    // Simuler la réponse du patient
-    setTimeout(() => {
-        const patientSpecificResponses = patientData?.specificResponses || [];
-        const genericResponses = ["Oui docteur, exactement.", "Ça a commencé il y a quelques jours...", "Non, je n'ai pas d'autres symptômes.", "La douleur est vraiment intense."];
-        // Prioriser les réponses spécifiques si disponibles
-        const responsePool = patientSpecificResponses.length > 0 ? patientSpecificResponses : genericResponses;
-        const patientResponseText = responsePool[Math.floor(Math.random() * responsePool.length)];
-      
-        const patientResponse: Message = { 
-            sender: 'patient', 
-            text: patientResponseText, 
-            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) 
+        // MOCKUP FRONT (Le backend a la vérité via ID, ici on initialise juste l'UI)
+        const fakePatient: Patient = {
+            nom: "Patient (Chargement...)",
+            age: 35,
+            sexe: "Masculin",
+            motif: "Consultation en cours...",
+            antecedents: "", symptomes: "", signesVitaux: "", temperature: "", pressionArterielle: "",
+            saturationOxygene: "", examenClinique: "", analyseBiologique: "", diagnostic: "", traitementAttendu: ""
         };
+
+        setPatientData(fakePatient);
         
-        setMessages(prev => [...prev, patientResponse]);
+        // Reset
+        setMessages([]);
+        setQuestionsCount(0);
+        setHintsUsed(0);
+        setUserDiagnosis('');
+        setGameState('asking');
+        setFinalResult(null);
+        setShowResultModal(false);
         
-        // --- Vérifier si on passe en mode diagnostic ---
-        if (messageCount + 1 >= 5) {
-             setTimeout(() => {
-                addSystemMessage("Vous avez posé toutes vos questions. Quel est votre diagnostic final ?");
-                setGameState('diagnosing');
-            }, 1000); // Léger délai pour la lisibilité
-        }
+        setCurrentView('consultation');
+        toast.success("Cas chargé !", { id: 'loadCase' });
 
-    }, 1500);
-  }
+        setMessages([{
+            sender: 'system',
+            text: "Le patient entre dans le cabinet. La consultation commence.",
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }]);
 
-  // --- NOUVELLES FONCTIONS DE GESTION DU MODAL ---
-  const handleExamClick = (exam: ClinicalExam) => {
-    setSelectedExam(exam);
-    setIsExamModalOpen(true);
-  };
-  const handleCloseExamModal = () => {
-    setIsExamModalOpen(false);
-    setSelectedExam(null);
-  };
-  
-  const handlePrescribeExam = (exam: ClinicalExam) => {
-    addSystemMessage(`Résultat - ${exam.name}: ${exam.resultat}`, exam.icon as Icon);
-    handleCloseExamModal(); // Important: fermer le modal après la prescription
-  };
-
-  const resetSimulation = () => {
-    setCurrentView('home');
-    setSelectedService(null);
-    setPatientData(null);
-    setMessages([]);
-    setInputMessage('');
-    setMessageCount(0);
-  };
-
-    // --- NOUVELLES FONCTIONS POUR LE MODAL DE TRAITEMENT ---
-  const handleOpenDrugModal = () => setIsDrugModalOpen(true);
-  const handleCloseDrugModal = () => setIsDrugModalOpen(false);
-  const handleFinalPrescription = () => {
-    addSystemMessage("Traitement prescrit avec succès. Le cas est maintenant terminé.");
-    setGameState('finished');
-    handleCloseDrugModal();
-  };
-  
-  
-  // --- RENDU ---
-  
-  const renderView = () => {
-    switch (currentView) {
-      case 'patientInfo':
-        if (patientData && selectedService) {
-          return <PatientInfoView patientData={patientData} selectedService={selectedService} onStartConsultation={startConsultation} />;
-        }
-        return null; // ou un fallback
-      case 'consultation':
-        if (patientData && selectedService) {
-            return (
-              <ConsultationView
-                patientData={patientData}
-                selectedService={selectedService}
-                messages={messages}
-                inputMessage={inputMessage}
-                onInputChange={setInputMessage}
-                onSendMessage={sendMessage}
-                messageCount={messageCount}
-                diagnosticTools={diagnosticTools}
-                onToolClick={handleToolClick}
-                clinicalExams={exampleExams} 
-                isGameOver={isGameOver}
-                onReset={resetSimulation}
-                // --- ON PASSE L'ÉTAT ET LES FONCTIONS AU COMPOSANT ENFANT ---
-                isExamModalOpen={isExamModalOpen}
-                selectedExam={selectedExam}
-                onExamClick={handleExamClick}
-                onCloseExamModal={handleCloseExamModal}
-                onPrescribeExam={handlePrescribeExam}
-
-                          // --- AJOUTS POUR LE NOUVEAU FLUX ---
-                gameState={gameState}
-                isDrugModalOpen={isDrugModalOpen}
-                onOpenDrugModal={handleOpenDrugModal}
-                onCloseDrugModal={handleCloseDrugModal}
-                onFinalPrescription={handleFinalPrescription}
-              />
-            );
-        }
-        return null; // ou un fallback
-      case 'home':
-      default:
-        return (
-            <HomeView 
-                difficulty={difficulty}
-                onDifficultyChange={setDifficulty}
-                onServiceSelect={handleServiceSelect}
-                onRandomCase={handleRandomCase}
-            />
-        );
+    } catch (err) {
+        toast.error("Erreur chargement.", { id: 'loadCase' });
+        console.error(err);
+    } finally {
+        setIsLoading(false);
     }
   };
-  
-  return (
-    <div className="min-h-screen bg-primary relative overflow-hidden font-sans">
-       {/* --- Début de l'intégration de la configuration Tailwind en CSS --- */}
-      <style jsx global>{`
-        /* 1. Définition des couleurs primaires comme variables CSS */
-        :root {
-          --color-primary: #052648;
-          --color-primary-dark: #031a31;
-        }
 
-        /* 2. Classes utilitaires qui utilisent ces couleurs */
-        .bg-primary {
-          background-color: var(--color-primary);
-        }
-        .text-primary {
-          color: var(--color-primary);
-        }
-        .border-primary {
-          border-color: var(--color-primary);
-        }
-        .bg-primary-dark {
-          background-color: var(--color-primary-dark);
-        }
-        .text-primary-dark {
-          color: var(--color-primary-dark);
-        }
-        .border-primary-dark {
-          border-color: var(--color-primary-dark);
-        }
+  // --- 2. LOGIQUE MESSAGE ---
+  const sendMessage = async () => {
+      if (!inputMessage.trim() || gameState !== 'asking' || isTyping) return;
 
-        /* 3. Définition des animations (Keyframes) */
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
+      if (checkProfanity(inputMessage)) {
+          setMessages(prev => [...prev, { sender: 'system', text: "⚠️ Langage inapproprié.", time: new Date().toLocaleTimeString(), quality: 'bad' }]);
+          setInputMessage('');
+          return;
+      }
 
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
+      const currentQCount = questionsCount + 1;
+      setQuestionsCount(currentQCount);
+      setIsTyping(true);
+
+      // --- PHASE A: TUTEUR (5 premiers messages) ---
+      let tutorFeedback: any = null;
+      if (currentQCount <= TUTOR_LIMIT) {
+          try {
+              console.group(`🧠 [FRONT] Analyse Tuteur (Question ${currentQCount}/${TUTOR_LIMIT})`);
+              const analysisRes = await fetch('/api/chat', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({
+                      mode: 'analyze',
+                      userMessage: inputMessage,
+                      messages: messages,
+                      caseId: caseSequenceId
+                  })
+              });
+              const analysisData = await analysisRes.json();
+              console.log("Feedback Tuteur:", analysisData);
+              console.groupEnd();
+              
+              if(analysisData.status) {
+                  tutorFeedback = {
+                      status: analysisData.status, 
+                      justification: analysisData.justification
+                  };
+              }
+          } catch (e) {
+              console.error("Erreur Tuteur:", e);
           }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+      }
 
-        /* 4. Classes pour appliquer les animations */
-        /* Disponibles globalement pour ce composant et ses enfants */
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out forwards;
-        }
-
-        .animate-fade-in-up {
-          animation: fadeInUp 0.5s ease-out forwards;
-        }
-      `}</style>
-       {/* --- Fin de l'intégration --- */}
-      {(currentView === 'home' || currentView === 'patientInfo') && (
-        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url(/images/hopital.jpg)' }}>
-            <div className="absolute inset-0 bg-black/50"></div>
-        </div>
-      )}
+      // --- PHASE B: Affichage Message Utilisateur ---
+      const userMsg: Message = {
+          sender: 'doctor',
+          text: inputMessage,
+          time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+          quality: tutorFeedback?.status === 'warning' ? 'bad' : 'good', 
+          feedback: tutorFeedback?.justification
+      };
       
-      <div className="relative z-10 min-h-screen flex flex-col">
-        <header className="p-4 flex items-center justify-between text-white flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary border-2 border-white/50 flex items-center justify-center shadow-lg">
-              <Link href='/'><Stethoscope className="w-6 h-6 text-white" /></Link>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">FullTang</h1>
-              <p className="text-white/70 text-xs">Simulation Médicale</p>
-            </div>
-          </div>
-          {currentView !== 'home' && (
-            <button onClick={resetSimulation} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          )}
-        </header>
+      setMessages(prev => [...prev, userMsg]);
+      const tempInput = inputMessage; 
+      setInputMessage('');
 
-        <main className="flex-1 flex items-center justify-center p-4">
-          {renderView()}
-        </main>
-      </div>
+      // --- PHASE C: Appel RAG Patient ---
+      try {
+          console.groupCollapsed(`🗣️ [FRONT] Envoi RAG Patient - Case ${caseSequenceId}`);
+          
+          const chatRes = await fetch('/api/chat', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                  mode: 'chat',
+                  userMessage: tempInput,
+                  messages: messages, 
+                  caseId: caseSequenceId,
+                  learnerId: user?.id
+              })
+          });
+          
+          const chatData = await chatRes.json();
+          console.log("📩 [FRONT] Réponse Brute:", chatData);
+          console.groupEnd();
+
+          // CORRECTION CRITIQUE ICI : Gestion polyvalente des clés de réponse
+          // Le backend peut renvoyer 'response' ou 'content' selon l'endpoint
+          const patientText = chatData.response || chatData.content || chatData.answer || "(Le patient reste silencieux...)";
+
+          setMessages(prev => [...prev, {
+              sender: 'patient',
+              text: patientText,
+              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+          }]);
+
+          // Mise à jour info patient si le backend les renvoie (optionnel mais utile pour 'role', 'nom' etc)
+          if(chatData.case_title && patientData?.nom === "Patient (Chargement...)") {
+             setPatientData(prev => ({ ...prev!, nom: "Patient " + caseSequenceId }));
+          }
+
+      } catch (err) {
+          console.error("Erreur Chat:", err);
+          toast.error("Problème de connexion avec le patient.");
+          setMessages(prev => [...prev, { sender: 'system', text: "Erreur technique : Le patient ne répond pas.", time: "" }]);
+      } finally {
+          setIsTyping(false);
+          
+          // Phase Check
+          if (currentQCount === TUTOR_LIMIT) {
+              setTimeout(() => {
+                  toast('Fin du tutorat. Mode autonomie.', { icon: '🎓' });
+                  setMessages(prev => [...prev, {
+                      sender: 'system',
+                      text: "🎓 FIN DE LA PHASE TUTORÉE. Vous continuez en autonomie.",
+                      time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+                  }]);
+              }, 1200);
+          }
+          
+          if (currentQCount >= MAX_QUESTIONS) {
+              setGameState('diagnosing');
+              toast("Consultation terminée. Diagnostic requis.", { icon: '🛑' });
+          }
+      }
+  };
+
+  // --- 3. INDICE ---
+  const requestHint = async () => {
+      if (hintsUsed >= MAX_HINTS) return toast.error("Plus d'indices disponibles.");
+      const tid = toast.loading("Le tuteur réfléchit...");
+      
+      try {
+          const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  mode: 'hint',
+                  caseId: caseSequenceId,
+                  learnerId: user?.id,
+                  messages: messages
+              })
+          });
+          const data = await res.json();
+          
+          setMessages(prev => [...prev, {
+              sender: 'tutor',
+              text: data.content,
+              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+              icon: Lightbulb
+          }]);
+          setHintsUsed(h => h + 1);
+          toast.success("Indice reçu", { id: tid });
+      } catch (e) {
+          toast.error("Indice indisponible", { id: tid });
+      }
+  };
+
+  // --- 4. EXAMENS ---
+  const handlePrescribeExam = async (examName: string, reason: string) => {
+      const tid = toast.loading(`Analyse ${examName}...`);
+      setIsExamModalOpen(false); // On ferme avant
+
+      try {
+          const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                  mode: 'exam',
+                  caseId: caseSequenceId,
+                  examName: examName,
+                  examReason: reason
+              })
+          });
+          const data = await res.json();
+
+          setMessages(prev => [...prev, {
+              sender: 'system',
+              text: `📄 RÉSULTAT ${data.exam_name || examName}: ${data.resultat}`,
+              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+              isAction: true
+          }]);
+          
+          toast.success("Résultat reçu", { id: tid });
+      } catch (e) {
+          toast.error("Erreur Labo", { id: tid });
+      }
+  };
+
+    // Wrapper simple pour la barre d'outils rapides (Thermometre, etc)
+  const handleQuickTool = (tool: any) => {
+      // On déclenche un examen "rapide" sans passer par la modale justification
+      handlePrescribeExam(tool.name, "Prise de constante (Monitoring)");
+  };
+
+  // --- 5. SUBMISSION ---
+  const handleFinalPrescription = async (medication: string, dosage: string) => {
+      const loadingId = toast.loading("Correction IA...");
+      setIsDrugModalOpen(false);
+
+      try {
+           const payload = {
+              mode: 'grade',
+              learnerId: user?.id,
+              caseId: caseSequenceId,
+              messages: messages, 
+              userDiagnosis: userDiagnosis,
+              userPrescription: `${medication} ${dosage}`
+           };
+
+           const res = await fetch('/api/chat', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify(payload)
+           });
+
+           const result: GameResult = await res.json();
+           const penalty = hintsUsed * 1; 
+           result.score = Math.max(0, result.score - penalty);
+
+           setFinalResult(result);
+           setGameState('finished');
+           setShowResultModal(true);
+           toast.success(`Terminé! Note : ${result.score}/20`, { id: loadingId });
+
+      } catch (err) {
+          console.error(err);
+          toast.error("Erreur notation.", { id: loadingId });
+      }
+  };
+
+  // --- 6. NAVIGATION CAS SUIVANT ---
+  const handleNextCase = () => {
+      const nextId = caseSequenceId + 1;
+      setCaseSequenceId(nextId);
+      if (selectedService) {
+          handleServiceSelect(selectedService); // Relance le flow complet
+      }
+  };
+
+  const checkProfanity = (txt: string) => PROFANITY_LIST.some(bw => txt.toLowerCase().includes(bw));
+  const tools = [
+      { name: 'Température', icon: Thermometer },
+      { name: 'Tension', icon: Gauge },
+      { name: 'SpO2', icon: Wind }
+  ];
+
+  const handleToolClick = (tool: any) => handlePrescribeExam(tool.name, "Prise de constante standard");
+  return (
+    <div className="min-h-screen bg-[#052648] relative font-sans text-slate-800">
+    <style jsx global>{`
+        :root { --color-primary: #052648; --color-primary-dark: #031a31; }
+        .bg-primary { background-color: var(--color-primary); }
+        .text-primary { color: var(--color-primary); }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+      `}</style>
+
+      <main className="flex-1 h-[calc(100vh-80px)] flex items-center justify-center p-4">
+        {isLoading && <div className="text-white animate-pulse">Initialisation du patient...</div>}
+
+        {!isLoading && (
+            <>
+                {currentView === 'home' && (
+                     <HomeView 
+                        difficulty="Débutant" 
+                        onDifficultyChange={() => {}} 
+                        onServiceSelect={handleServiceSelect} 
+                        onRandomCase={() => handleServiceSelect(services[0])} 
+                     />
+                )}
+
+                {/* NOTE: PatientInfoView est sauté dans ce flux pour aller vite, mais on pourrait l'ajouter */}
+
+                {currentView === 'consultation' && selectedService && (
+                    <ConsultationView
+                        patientData={patientData!} // Fake data initially
+                        selectedService={selectedService}
+                        messages={messages}
+                        inputMessage={inputMessage}
+                        onInputChange={setInputMessage}
+                        onSendMessage={sendMessage}
+                        messageCount={questionsCount}
+                        MAX_QUESTIONS={MAX_QUESTIONS}
+                        diagnosticTools={tools as any}
+                        clinicalExams={exampleExams} 
+                        
+                        // Exams Logic
+                        isExamModalOpen={isExamModalOpen}
+                        selectedExam={selectedExam}
+                        onExamClick={(ex) => { setSelectedExam(ex); setIsExamModalOpen(true); }}
+                        onCloseExamModal={() => setIsExamModalOpen(false)}
+                        onPrescribeExam={(exam) => handlePrescribeExam(exam.name, "Examen standard")}
+                        
+                        // Game Logic
+                        isGameOver={gameState === 'finished'}
+                        gameState={gameState}
+                        onReset={handleNextCase} 
+                        
+                        // Hints
+                        remainingHints={MAX_HINTS - hintsUsed}
+                        onRequestHint={requestHint}
+                        
+                        // Diagnosis
+                        userDiagnosis={userDiagnosis}
+                        setUserDiagnosis={setUserDiagnosis}
+                        onTriggerDiagnosis={() => setGameState('diagnosing')}
+                        onConfirmDiagnosis={() => {
+                            if(!userDiagnosis.trim()) return toast.error("Diagnostic requis.");
+                            setGameState('treating');
+                            setIsDrugModalOpen(true);
+                        }}
+                        
+                        // Drugs
+                        isDrugModalOpen={isDrugModalOpen}
+                        onOpenDrugModal={() => setIsDrugModalOpen(true)}
+                        onCloseDrugModal={() => setIsDrugModalOpen(false)}
+                        onFinalPrescription={handleFinalPrescription}
+                        isTyping={isTyping}
+                        onToolClick={handleQuickTool}
+                    />
+                )}
+            </>
+        )}
+      </main>
+      
+      {/* --- RESULT MODAL RESPONSIVE --- */}
+      {showResultModal && finalResult && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
+               <div className="bg-white rounded-2xl w-full max-w-lg md:max-w-2xl lg:max-w-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+                   
+                   <div className={`h-2 w-full flex-shrink-0 ${finalResult.score >= 10 ? 'bg-green-500' : 'bg-red-500'}`} />
+                   
+                   <div className="p-6 md:p-8 overflow-y-auto">
+                       <div className="text-center mb-8">
+                           <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full border-4 mb-4 ${
+                               finalResult.score >= 10 ? 'border-green-100 bg-green-50 text-green-600' : 'border-red-100 bg-red-50 text-red-600'
+                           }`}>
+                               <span className="text-4xl font-bold">{finalResult.score}</span>
+                               <span className="text-xs text-gray-500 mt-1 ml-1">/20</span>
+                           </div>
+                           <h2 className="text-2xl font-bold text-gray-800">
+                               {finalResult.score >= 10 ? "Stage Validé !" : "Stage Non Validé"}
+                           </h2>
+                       </div>
+
+                       <div className="grid md:grid-cols-2 gap-6 text-left">
+                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                               <p className="text-xs text-slate-500 uppercase font-bold mb-2">Analyse du Professeur</p>
+                               <p className="text-sm text-slate-700 leading-relaxed italic">"{finalResult.feedback}"</p>
+                           </div>
+                           
+                           {finalResult.missedSteps && finalResult.missedSteps.length > 0 && (
+                               <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                                   <p className="text-xs text-amber-700 uppercase font-bold mb-2">Points manqués</p>
+                                   <ul className="text-sm text-amber-800 space-y-1 list-disc pl-4">
+                                       {finalResult.missedSteps.map((step, i) => <li key={i}>{step}</li>)}
+                                   </ul>
+                               </div>
+                           )}
+                       </div>
+                   </div>
+
+                   <div className="p-6 border-t bg-gray-50 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                       <button onClick={() => {setShowResultModal(false); setCurrentView('home');}} className="text-slate-500 hover:text-primary font-medium text-sm">
+                           Retour au menu
+                       </button>
+                       <button onClick={handleNextCase} 
+                           className="w-full sm:w-auto px-8 py-3 bg-[#052648] text-white font-bold rounded-xl hover:bg-[#0a4d8f] transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl">
+                           <RefreshCcw size={18} />
+                           Cas Suivant (N°{caseSequenceId + 1})
+                       </button>
+                   </div>
+               </div>
+           </div>
+      )}
     </div>
   );
 };

@@ -1,14 +1,14 @@
 // components/simulation/HomeView.tsx
 'use client';
-import { Shuffle } from 'lucide-react';
+import { Shuffle, Settings } from 'lucide-react'; // Added Settings icon for difficulty selector
 import { services, difficultyLevels } from '@/types/simulation/constant';
 import { Service } from '@/types/simulation/types';
 
 interface HomeViewProps {
-  difficulty: string;
-  onDifficultyChange: (level: string) => void;
-  onServiceSelect: (service: Service) => void;
-  onRandomCase: () => void;
+  difficulty: string; // The current difficulty selected
+  onDifficultyChange: (level: string) => void; // Function to update difficulty
+  onServiceSelect: (service: Service, difficulty: string) => void; // Modified to pass difficulty
+  onRandomCase: (difficulty: string) => void; // Modified to pass difficulty
 }
 
 const HomeView: React.FC<HomeViewProps> = ({ difficulty, onDifficultyChange, onServiceSelect, onRandomCase }) => {
@@ -19,8 +19,11 @@ const HomeView: React.FC<HomeViewProps> = ({ difficulty, onDifficultyChange, onS
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {services.map(service => (
-          <button key={service.id} onClick={() => onServiceSelect(service)}
-            className="group relative aspect-square rounded-xl overflow-hidden text-white font-bold shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+          <button 
+            key={service.id} 
+            onClick={() => onServiceSelect(service, difficulty)} // Pass selected difficulty
+            className="group relative aspect-square rounded-xl overflow-hidden text-white font-bold shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
+          >
             <div className="absolute inset-0 bg-cover bg-center backdrop-blur-md scale-110 group-hover:blur-none transition-all duration-300" 
                  style={{backgroundImage: `url(${service.bgImage})`}}></div>
             <div className="absolute inset-0 bg-primary opacity-70 group-hover:opacity-60 transition-opacity duration-300"></div>
@@ -33,7 +36,9 @@ const HomeView: React.FC<HomeViewProps> = ({ difficulty, onDifficultyChange, onS
       </div>
       
       <div className="mb-6">
-         <p className="text-center text-sm text-slate-700 font-semibold mb-3">Niveau de difficulté</p>
+         <p className="text-center text-sm text-slate-700 font-semibold mb-3 flex items-center justify-center gap-2">
+            <Settings size={16}/> Niveau de difficulté
+        </p>
          <div className="flex justify-center gap-2 flex-wrap">
            {difficultyLevels.map(level => (
              <button key={level} onClick={() => onDifficultyChange(level)}
@@ -45,7 +50,10 @@ const HomeView: React.FC<HomeViewProps> = ({ difficulty, onDifficultyChange, onS
          </div>
       </div>
       
-      <button onClick={onRandomCase} className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 flex items-center justify-center gap-2">
+      <button 
+        onClick={() => onRandomCase(difficulty)} // Pass selected difficulty
+        className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity duration-300 flex items-center justify-center gap-2"
+      >
         <Shuffle className="w-5 h-5" />
         CAS ALÉATOIRE
       </button>

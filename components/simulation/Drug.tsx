@@ -11,7 +11,8 @@ interface DrugPrescriptionProps {
   onClose: () => void;
   patient: Patient;
   diagnosis: string;
-  onPrescribe: () => void; // Simple callback pour confirmer la prescription
+  // MODIFIÉ : onPrescribe doit maintenant accepter medication et dosage
+  onPrescribe: (medication: string, dosage: string) => void; 
 }
 
 const DrugPrescriptionModal: React.FC<DrugPrescriptionProps> = ({
@@ -28,9 +29,12 @@ const DrugPrescriptionModal: React.FC<DrugPrescriptionProps> = ({
   const handlePrescribeClick = () => {
     // Dans une vraie application, vous enverriez ces données
     console.log({ medication, dosage, recommendations });
-    onPrescribe(); // Informe le parent que la prescription est terminée
+    // MODIFIÉ : Passe les données du traitement
+    onPrescribe(medication, dosage); 
   };
   
+  // ... (rest of the component unchanged)
+
   if (!isOpen) {
     return null;
   }

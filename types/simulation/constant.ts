@@ -1,6 +1,5 @@
 import { Heart, Baby, Ear, Brain, Eye, Bone, Wind, Activity, Droplet, Shield, Microscope, TestTube, Users, Thermometer, Syringe, CloudDrizzle } from 'lucide-react';
 import { Service, PatientsData, UseCase, ClinicalExam } from '@/types/simulation/types';
-
 export const MAIN_COLOR = '#052648';
 
 export const services: Service[] = [
@@ -16,34 +15,51 @@ export const services: Service[] = [
 
 export const difficultyLevels = ['Profane', 'Débutant', 'Intermédiaire', 'Confirmé', 'Expert'];
 
+// Base de données statique riche
 export const patientsData: PatientsData = {
-  cardio: {
-    nom: 'M. Kamdem Jean', age: 58, sexe: 'Masculin', motif: 'Douleur thoracique et essoufflement', antecedents: 'Hypertension artérielle, tabagisme', symptomes: 'Douleur oppressive rétrosternale irradiant vers le bras gauche, dyspnée, sueurs',
-    signesVitaux: 'TA: 160/95 mmHg, FC: 98 bpm, FR: 22/min, SpO2: 94%',
-    temperature: '37.1°C', pressionArterielle: '160/95 mmHg', saturationOxygene: '94%', examenClinique: 'Ausculation cardiaque: Bruits du cœur réguliers, pas de souffle. Auscultation pulmonaire: murmure vésiculaire conservé.', analyseBiologique: 'Troponine élevée.',
-    diagnostic: 'Syndrome coronarien aigu',
-     // --- AJOUT ---
-    specificResponses: [
-        "La douleur est comme un poids très lourd sur ma poitrine.",
-        "Oui, ça me lance dans le bras gauche et la mâchoire.",
-        "J'ai du mal à respirer, comme si je manquais d'air.",
-        "Non docteur, je n'ai jamais eu ça avant."
-    ]
+  'cardio': {
+    nom: 'M. Kamdem Jean',
+    age: 58,
+    sexe: 'Masculin',
+    motif: 'Douleur thoracique constrictive',
+    antecedents: 'HTA mal suivie, Tabagisme actif (20 PA)',
+    modeDeVie: 'Sédentaire, alimentation riche en sel',
+    histoireMaladie: 'Douleur apparue brutalement au repos il y a 2h, irradiant dans la mâchoire.',
+    symptomes: 'Douleur rétro-sternale, angoisse, sueurs froides, légère nausée.',
+    signesVitaux: 'TA: 160/95 mmHg, FC: 110 bpm, SpO2: 96% AA',
+    temperature: '37.1°C',
+    pressionArterielle: '160/95 mmHg',
+    saturationOxygene: '96%',
+    examenClinique: 'Bruits du cœur réguliers, pas de souffle. Poumons libres. Pas d\'OMI.',
+    analyseBiologique: 'ECG: Sus-décalage ST en DII, DIII, aVF (Territoire inférieur). Troponines positives.',
+    diagnostic: 'Infarctus du Myocarde (SCA ST+ inférieur)',
+    traitementAttendu: 'Aspirine, Clopidogrel/Ticagrelor, Héparine, Appel cardiologie interventionnelle (Coronarographie).'
   },
-  pediatrie: {
-    nom: 'Bébé Ngo\'o Marie', age: 2, sexe: 'Féminin', motif: 'Fièvre et difficultés respiratoires', antecedents: 'Prématurée, vaccination à jour', symptomes: 'Fièvre 39.5°C, toux productive, geignement expiratoire, tirage intercostal',
-    signesVitaux: 'T: 39.5°C, FC: 145 bpm, FR: 55/min, SpO2: 89%',
-    temperature: '39.5°C', pressionArterielle: '90/60 mmHg', saturationOxygene: '89%', examenClinique: 'Râles crépitants à l\'auscultation du poumon droit.', analyseBiologique: 'Hyperleucocytose à polynucléaires neutrophiles.',
-    diagnostic: 'Pneumonie aiguë',
-     // --- AJOUT ---
-    specificResponses: [
-        "Elle tousse beaucoup, surtout la nuit.",
-        "Sa respiration est très rapide, ça me fait peur.",
-        "Elle ne veut plus manger depuis ce matin.",
-        "Oui, son corps est très chaud."
-    ]
+  'pneumo': {
+    nom: 'Mme. Sarah Nguemo',
+    age: 34,
+    sexe: 'Féminin',
+    motif: 'Essoufflement et toux sèche persistante',
+    antecedents: 'Rhinite allergique',
+    modeDeVie: 'Non fumeuse, travaille dans une boulangerie (exposition farine)',
+    histoireMaladie: 'Toux nocturne depuis 3 semaines. Crises de dyspnée sifflante à l\'effort.',
+    symptomes: 'Dyspnée expiratoire, sensation d\'oppression thoracique, réveils nocturnes.',
+    signesVitaux: 'TA: 120/70, FC: 88, SpO2: 97%, FR: 22/min',
+    temperature: '37.0°C',
+    pressionArterielle: '120/70 mmHg',
+    saturationOxygene: '97%',
+    examenClinique: 'Sibilants expiratoires bilatéraux diffus. Temps expiratoire allongé.',
+    analyseBiologique: 'EFR: Syndrome obstructif réversible sous Beta-2. NFS: Hyperéosinophilie modérée.',
+    diagnostic: 'Asthme Bronchique',
+    traitementAttendu: 'Bronchodilatateurs courte action (Ventoline) si crise + Corticostéroïdes inhalés de fond.'
   },
-  // ... autres patients
+  // On peut ajouter un "FallBack" case générique
+  'fallback': {
+    nom: 'Patient Standard', age: 30, sexe: 'Masculin', motif: 'Fièvre', antecedents: 'Rien',
+    symptomes: 'Mal de tête, fièvre', signesVitaux: 'Normal', temperature: '38',
+    pressionArterielle: '120/80', saturationOxygene: '99', examenClinique: 'Normal',
+    analyseBiologique: 'Normale', diagnostic: 'Grippe', traitementAttendu: 'Repos, paracétamol'
+  }
 };
 
 // ----- DANS LA SECTION OÙ VOUS PRÉPAREZ VOS DONNÉES (POUR L'EXEMPLE) -----
@@ -118,5 +134,12 @@ export const useCases: UseCase[] = [
       diagnostic: 'Otite moyenne aiguë (OMA)'
     }
   }
+];
+
+export const hints = [
+  "Avez-vous pensé à demander les antécédents cardiovasculaires ?",
+  "Regardez bien les signes vitaux, une tachycardie est présente.",
+  "La biologie montre une anomalie spécifique, comparez avec les symptômes.",
+  "Ce type de douleur est caractéristique d'une urgence vitale."
 ];
 

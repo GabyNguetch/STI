@@ -4,6 +4,7 @@
 import React from 'react';
 import { CheckCircle2, Award, BriefcaseMedical, TrendingUp, AlertCircle } from 'lucide-react';
 import { services } from '@/types/simulation/constant';
+import { UserProgressData } from '@/services/caseService'; // Import du type
 
 // Le composant StatCard reste inchangé
 const StatCard: React.FC<{ icon: React.ElementType, title: string, value: string | number, color: string }> = ({ icon: Icon, title, value, color }) => (
@@ -19,7 +20,7 @@ const StatCard: React.FC<{ icon: React.ElementType, title: string, value: string
 );
 
 interface OverviewProps {
-  userProgress: any[];
+  userProgress: UserProgressData[]; // Utilisation du bon type
 }
 
 const Overview: React.FC<OverviewProps> = ({ userProgress }) => {
