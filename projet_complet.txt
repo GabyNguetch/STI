@@ -4,18 +4,17 @@ FICHIER: D:\5GI\STI\fulltang-sti\app\simulation\page.tsx
 
 // app/simulation/page.tsx
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
-import { Stethoscope, X, Lightbulb, AlertTriangle, Thermometer, Gauge, Wind, Brain, RefreshCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Stethoscope, X, Lightbulb, Thermometer, Gauge, Wind, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchCases, fetchClinicalCase, saveEvaluation, startCaseForUser as startCaseForUserService } from '@/services/SimulationService';
-import { services, difficultyLevels, hints } from '@/types/simulation/constant';
-import { Patient, Service, Message, ClinicalExam, GameState, GameResult } from '@/types/simulation/types';
+import { fetchClinicalCase } from '@/services/SimulationService';
+import { services } from '@/types/simulation/constant';
+import { Patient, Service, Message, ClinicalExam, GameResult, GameState } from '@/types/simulation/types';
 import { exampleExams } from '@/types/simulation/constant';
-// 2. IMPORT DE LA LISTE
 import { PROFANITY_LIST } from '@/types/simulation/grosmot';
 
 import HomeView from '@/components/simulation/HomeView';
@@ -24,309 +23,299 @@ import ConsultationView from '@/components/simulation/ConsultationView';
 
 const MedicalSimulationPage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading: isAuthLoading } = useAuth();
 
-  // --- ÉTATS ---
+  // --- CONFIG SCENARIO ---
+  const [caseSequenceId, setCaseSequenceId] = useState(1040); // Départ demandé 1040
+  const TUTOR_LIMIT = 5;  // Phase tutorée
+  const MAX_QUESTIONS = 10; // Phase libre
+
+  // --- ÉTATS GLOBAUX ---
   const [currentView, setCurrentView] = useState('home');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('Débutant');
   const [isLoading, setIsLoading] = useState(false);
   
   const [patientData, setPatientData] = useState<Patient | null>(null);
-  const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
   
+  // États Chat
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  
-  const [gameState, setGameState] = useState<GameState>('asking');
-  const [messageCount, setMessageCount] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
-  const [finalResult, setFinalResult] = useState<GameResult | null>(null);
-
+  const [questionsCount, setQuestionsCount] = useState(0); // Docteur -> Patient seulement
+  
+  // États Jeu
+  const [gameState, setGameState] = useState<GameState>('asking');
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const MAX_HINTS = 3;
   const [userDiagnosis, setUserDiagnosis] = useState('');
+  const [finalResult, setFinalResult] = useState<GameResult | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+
+  // Modales
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<ClinicalExam | null>(null);
   const [isDrugModalOpen, setIsDrugModalOpen] = useState(false); 
-  const [showResultModal, setShowResultModal] = useState(false);
 
-    // Compteur des messages (Docteur -> Patient)
-  const [questionsCount, setQuestionsCount] = useState(0);
-  const QUESTIONS_LIMIT = 10;
-  
-
-  const [hintsUsed, setHintsUsed] = useState(0);
-  const MAX_HINTS = 3;
-  // MODIFICATION : Limite passée à 1000 pour simuler "illimité" sans casser la logique existante de comptage
-  const MAX_QUESTIONS = 1000; 
-
-  const isGameOver = gameState === 'finished'; 
-
-  // --- Authentification ---
+  // Protection Route
   useEffect(() => {
     if (!isAuthLoading && !user && currentView !== 'home') {
-      toast.error("Veuillez vous connecter pour accéder à la simulation.");
+      toast.error("Connexion requise.");
       router.push('/connexion');
     }
   }, [user, isAuthLoading, router, currentView]);
 
-  // --- INITIALISATION ---
-  const handleServiceSelect = async (service: Service, difficulty: string = selectedDifficulty) => {
-    if (isAuthLoading) return;
+  // Si on reçoit un caseId via URL (dashboard), on peut l'utiliser, sinon on force la logique séquentielle
+  useEffect(() => {
+      const urlId = searchParams.get('caseId');
+      if(urlId) setCaseSequenceId(parseInt(urlId));
+  }, [searchParams]);
+
+  // --- 1. DÉMARRAGE DU CAS ---
+  const handleServiceSelect = async (service: Service) => {
     if (!user) { router.push('/connexion'); return; }
 
     setIsLoading(true);
-    toast.loading("Chargement du cas clinique...", { id: 'loadCase' });
+    toast.loading(`Chargement Cas N°${caseSequenceId}...`, { id: 'loadCase' });
     
     try {
         setSelectedService(service);
-        setSelectedDifficulty(difficulty);
         
-        const caseData = await fetchClinicalCase(service.id, difficulty);
+        // MOCKUP FRONT (Le backend a la vérité via ID, ici on initialise juste l'UI)
+        const fakePatient: Patient = {
+            nom: "Patient (Chargement...)",
+            age: 35,
+            sexe: "Masculin",
+            motif: "Consultation en cours...",
+            antecedents: "", symptomes: "", signesVitaux: "", temperature: "", pressionArterielle: "",
+            saturationOxygene: "", examenClinique: "", analyseBiologique: "", diagnostic: "", traitementAttendu: ""
+        };
 
-        if (caseData) {
-            setPatientData(caseData.patient);
-            setCurrentCaseId(caseData.id);
-            await startCaseForUserService(caseData.id, user.id);
+        setPatientData(fakePatient);
+        
+        // Reset
+        setMessages([]);
+        setQuestionsCount(0);
+        setHintsUsed(0);
+        setUserDiagnosis('');
+        setGameState('asking');
+        setFinalResult(null);
+        setShowResultModal(false);
+        
+        setCurrentView('consultation');
+        toast.success("Cas chargé !", { id: 'loadCase' });
 
-            setMessages([]);
-            setMessageCount(0);
-            setHintsUsed(0);
-            setUserDiagnosis('');
-            setGameState('asking');
-            setFinalResult(null);
-            setShowResultModal(false);
-            
-            setCurrentView('patientInfo');
-            toast.success("Dossier patient chargé !", { id: 'loadCase' });
-        } else {
-            toast.error(`Aucun cas disponible pour ${service.name}.`, { id: 'loadCase' });
-        }
+        setMessages([{
+            sender: 'system',
+            text: "Le patient entre dans le cabinet. La consultation commence.",
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }]);
+
     } catch (err) {
-        toast.error("Erreur de connexion.", { id: 'loadCase' });
+        toast.error("Erreur chargement.", { id: 'loadCase' });
         console.error(err);
     } finally {
         setIsLoading(false);
     }
   };
 
-  const startConsultation = () => {
-    if (!patientData) return;
-    setCurrentView('consultation');
-    setMessages([
-      { 
-        sender: 'patient', 
-        text: `Bonjour docteur... ${patientData.motif}.`, 
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) 
-      }
-    ]);
-  };
-
-  // --- SERVICE D'INTEGRATION IA / BACKEND ---
-  const callAIResponse = async (userText: string) => {
-    // LOG REQUÊTE : Console du Navigateur
-    console.groupCollapsed(`🚀 [API Request] Envoi au RAG Python via Proxy`);
-    console.log("Message utilisateur:", userText);
-    console.log("ID du Cas:", currentCaseId);
-    console.log("Endpoint:", '/api/chat');
-    console.groupEnd();
-
-    setIsTyping(true);
-    
-    try {
-        if (!currentCaseId) throw new Error("ID du cas manquant");
-
-        const payload = {
-            mode: 'chat',
-            messages: [...messages, { sender: 'doctor', text: userText }], // On envoie l'historique pour contexte éventuel
-            caseId: currentCaseId, // INDISPENSABLE POUR LE RAG PYTHON
-            patientData: patientData // Pour backup si besoin
-        };
-        
-        const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        const responseText = await res.text();
-        
-        // LOG RÉPONSE : Console du Navigateur
-        console.groupCollapsed(`📥 [API Response] Réponse du RAG`);
-        console.log("Statut:", res.status);
-        console.log("Réponse brute:", responseText);
-        console.groupEnd();
-
-        if (!res.ok) {
-            let errorDetail = "Erreur inconnue";
-            try {
-               const jsonErr = JSON.parse(responseText);
-               errorDetail = jsonErr.error || JSON.stringify(jsonErr);
-            } catch(e) {
-               errorDetail = responseText.substring(0, 100); 
-            }
-            throw new Error(`Erreur RAG (${res.status}): ${errorDetail}`);
-        }
-        
-        const data = JSON.parse(responseText);
-        
-        if (!data.content && !data.score) {
-            throw new Error("Format de réponse vide ou invalide (pas de champ 'content').");
-        }
-        
-        // Ajout message patient
-        const newMessage: Message = {
-            sender: 'patient',
-            text: data.content,
-            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-        };
-        
-        setMessages(prev => [...prev, newMessage]);
-
-    } catch (e: any) {
-        console.error("❌ [CLIENT ERROR]:", e);
-        toast.error(`Erreur RAG: ${e.message}`);
-        setMessages(prev => [...prev, {
-            sender: 'system',
-            text: `Le patient n'a pas pu répondre. (Erreur technique: ${e.message})`,
-            time: new Date().toLocaleTimeString()
-        }]);
-    } finally {
-        setIsTyping(false);
-    }
-};
-
-  // --- LOGIQUE CHAT ---
+  // --- 2. LOGIQUE MESSAGE ---
   const sendMessage = async () => {
-      if (!inputMessage.trim() || isGameOver || isTyping) return;
-      if (gameState !== 'asking') return;
+      if (!inputMessage.trim() || gameState !== 'asking' || isTyping) return;
 
-      // 1. Check Gros Mots
       if (checkProfanity(inputMessage)) {
+          setMessages(prev => [...prev, { sender: 'system', text: "⚠️ Langage inapproprié.", time: new Date().toLocaleTimeString(), quality: 'bad' }]);
           setInputMessage('');
-          setMessages(prev => [...prev, {
-              sender: 'system',
-              text: "⚠️ Attention à votre langage professionnel.",
-              time: new Date().toLocaleTimeString(),
-              quality: 'bad'
-          }]);
           return;
       }
 
-      // 2. Ajouter message utilisateur
-      const newUserMsg: Message = {
-          sender: 'doctor',
-          text: inputMessage,
-          time: new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})
-      };
-      setMessages(prev => [...prev, newUserMsg]);
-      setInputMessage('');
+      const currentQCount = questionsCount + 1;
+      setQuestionsCount(currentQCount);
       setIsTyping(true);
 
-      // Incrémenter compteur
-      const nextCount = questionsCount + 1;
-      setQuestionsCount(nextCount);
+      // --- PHASE A: TUTEUR (5 premiers messages) ---
+      let tutorFeedback: any = null;
+      if (currentQCount <= TUTOR_LIMIT) {
+          try {
+              console.group(`🧠 [FRONT] Analyse Tuteur (Question ${currentQCount}/${TUTOR_LIMIT})`);
+              const analysisRes = await fetch('/api/chat', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({
+                      mode: 'analyze',
+                      userMessage: inputMessage,
+                      messages: messages,
+                      caseId: caseSequenceId
+                  })
+              });
+              const analysisData = await analysisRes.json();
+              console.log("Feedback Tuteur:", analysisData);
+              console.groupEnd();
+              
+              if(analysisData.status) {
+                  tutorFeedback = {
+                      status: analysisData.status, 
+                      justification: analysisData.justification
+                  };
+              }
+          } catch (e) {
+              console.error("Erreur Tuteur:", e);
+          }
+      }
 
+      // --- PHASE B: Affichage Message Utilisateur ---
+      const userMsg: Message = {
+          sender: 'doctor',
+          text: inputMessage,
+          time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+          quality: tutorFeedback?.status === 'warning' ? 'bad' : 'good', 
+          feedback: tutorFeedback?.justification
+      };
+      
+      setMessages(prev => [...prev, userMsg]);
+      const tempInput = inputMessage; 
+      setInputMessage('');
+
+      // --- PHASE C: Appel RAG Patient ---
       try {
-          // APPEL BACKEND API (PROXY)
-          const response = await fetch('/api/chat', {
+          console.groupCollapsed(`🗣️ [FRONT] Envoi RAG Patient - Case ${caseSequenceId}`);
+          
+          const chatRes = await fetch('/api/chat', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({
                   mode: 'chat',
-                  userMessage: newUserMsg.text,
-                  messages: messages, // Historique pour le contexte
-                  caseId: currentCaseId,
+                  userMessage: tempInput,
+                  messages: messages, 
+                  caseId: caseSequenceId,
                   learnerId: user?.id
               })
           });
-
-          const data = await response.json();
-
-          if (data.error) throw new Error(data.error);
-
-          // Réponse Patient
-          setMessages(prev => [...prev, {
-              sender: 'patient',
-              text: data.content,
-              time: new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})
-          }]);
-
-          // Logs Console comme demandé
-          console.group("🗨️ CHAT INTERACTION");
-          console.log("Request:", { msg: newUserMsg.text, count: nextCount });
-          console.log("Response:", data);
+          
+          const chatData = await chatRes.json();
+          console.log("📩 [FRONT] Réponse Brute:", chatData);
           console.groupEnd();
 
-      } catch (err: any) {
-          toast.error("Erreur connexion patient.");
-          console.error(err);
+          // CORRECTION CRITIQUE ICI : Gestion polyvalente des clés de réponse
+          // Le backend peut renvoyer 'response' ou 'content' selon l'endpoint
+          const patientText = chatData.response || chatData.content || chatData.answer || "(Le patient reste silencieux...)";
+
+          setMessages(prev => [...prev, {
+              sender: 'patient',
+              text: patientText,
+              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+          }]);
+
+          // Mise à jour info patient si le backend les renvoie (optionnel mais utile pour 'role', 'nom' etc)
+          if(chatData.case_title && patientData?.nom === "Patient (Chargement...)") {
+             setPatientData(prev => ({ ...prev!, nom: "Patient " + caseSequenceId }));
+          }
+
+      } catch (err) {
+          console.error("Erreur Chat:", err);
+          toast.error("Problème de connexion avec le patient.");
+          setMessages(prev => [...prev, { sender: 'system', text: "Erreur technique : Le patient ne répond pas.", time: "" }]);
       } finally {
           setIsTyping(false);
           
-          // VERIFICATION FIN PHASE FORMATIVE (10 messages)
-          if (nextCount >= QUESTIONS_LIMIT) {
+          // Phase Check
+          if (currentQCount === TUTOR_LIMIT) {
               setTimeout(() => {
-                  toast('Fin de l\'interrogatoire. Passez au diagnostic.', { icon: '🛑' });
+                  toast('Fin du tutorat. Mode autonomie.', { icon: '🎓' });
                   setMessages(prev => [...prev, {
                       sender: 'system',
-                      text: "🛑 Fin de la phase d'anamnèse (10 questions). Veuillez formuler votre diagnostic.",
-                      time: new Date().toLocaleTimeString()
+                      text: "🎓 FIN DE LA PHASE TUTORÉE. Vous continuez en autonomie.",
+                      time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
                   }]);
-                  setGameState('diagnosing');
-              }, 1000);
+              }, 1200);
+          }
+          
+          if (currentQCount >= MAX_QUESTIONS) {
+              setGameState('diagnosing');
+              toast("Consultation terminée. Diagnostic requis.", { icon: '🛑' });
           }
       }
   };
 
-  // --- LOGIQUE HINT ---
+  // --- 3. INDICE ---
   const requestHint = async () => {
       if (hintsUsed >= MAX_HINTS) return toast.error("Plus d'indices disponibles.");
+      const tid = toast.loading("Le tuteur réfléchit...");
       
-      const toastId = toast.loading("Le tuteur réfléchit...");
       try {
-          // APPEL API MODE 'HINT'
           const res = await fetch('/api/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                   mode: 'hint',
-                  caseId: currentCaseId,
+                  caseId: caseSequenceId,
                   learnerId: user?.id,
-                  messages: messages // Tuteur a besoin du contexte pour savoir quel indice donner
+                  messages: messages
               })
           });
           const data = await res.json();
           
           setMessages(prev => [...prev, {
-              sender: 'tutor', // Nouveau sender spécial
-              text: `💡 TUTEUR: ${data.content}`,
-              time: new Date().toLocaleTimeString(),
+              sender: 'tutor',
+              text: data.content,
+              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+              icon: Lightbulb
           }]);
           setHintsUsed(h => h + 1);
-          toast.success("Indice reçu !", { id: toastId });
-
-          console.log("💡 HINT REQUEST:", data);
-
+          toast.success("Indice reçu", { id: tid });
       } catch (e) {
-          toast.error("Impossible d'obtenir un indice.", { id: toastId });
+          toast.error("Indice indisponible", { id: tid });
       }
   };
 
-  // --- SOUMISSION FINALE ---
+  // --- 4. EXAMENS ---
+  const handlePrescribeExam = async (examName: string, reason: string) => {
+      const tid = toast.loading(`Analyse ${examName}...`);
+      setIsExamModalOpen(false); // On ferme avant
+
+      try {
+          const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                  mode: 'exam',
+                  caseId: caseSequenceId,
+                  examName: examName,
+                  examReason: reason
+              })
+          });
+          const data = await res.json();
+
+          setMessages(prev => [...prev, {
+              sender: 'system',
+              text: `📄 RÉSULTAT ${data.exam_name || examName}: ${data.resultat}`,
+              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+              isAction: true
+          }]);
+          
+          toast.success("Résultat reçu", { id: tid });
+      } catch (e) {
+          toast.error("Erreur Labo", { id: tid });
+      }
+  };
+
+    // Wrapper simple pour la barre d'outils rapides (Thermometre, etc)
+  const handleQuickTool = (tool: any) => {
+      // On déclenche un examen "rapide" sans passer par la modale justification
+      handlePrescribeExam(tool.name, "Prise de constante (Monitoring)");
+  };
+
+  // --- 5. SUBMISSION ---
   const handleFinalPrescription = async (medication: string, dosage: string) => {
-      // Cette fonction est appelée depuis la modal "Drug". 
-      // Elle déclenche l'appel final "GRADE".
-      
-      console.log("🏁 SUBMISSION START");
-      const loadingId = toast.loading("Analyse du cas par le Tuteur IA...");
+      const loadingId = toast.loading("Correction IA...");
       setIsDrugModalOpen(false);
 
       try {
            const payload = {
               mode: 'grade',
               learnerId: user?.id,
-              caseId: currentCaseId,
-              messages: messages, // Le tuteur analyse TOUT le chat
+              caseId: caseSequenceId,
+              messages: messages, 
               userDiagnosis: userDiagnosis,
               userPrescription: `${medication} ${dosage}`
            };
@@ -337,86 +326,41 @@ const MedicalSimulationPage = () => {
                body: JSON.stringify(payload)
            });
 
-           const gradingResult: GameResult = await res.json();
-           
-           console.group("📝 GRADING RESULT");
-           console.log("Note:", gradingResult.score);
-           console.log("Feedback:", gradingResult.feedback);
-           console.groupEnd();
+           const result: GameResult = await res.json();
+           const penalty = hintsUsed * 1; 
+           result.score = Math.max(0, result.score - penalty);
 
-           setFinalResult(gradingResult);
+           setFinalResult(result);
            setGameState('finished');
            setShowResultModal(true);
-           toast.success(`Terminé ! Note : ${gradingResult.score}/20`, { id: loadingId });
-           
-           // Sauvegarde finale locale Supabase (redondance ou analytics)
-           if (user && currentCaseId) {
-             saveEvaluation(user.id, currentCaseId, gradingResult, messages, userDiagnosis, payload.userPrescription);
-           }
+           toast.success(`Terminé! Note : ${result.score}/20`, { id: loadingId });
 
       } catch (err) {
           console.error(err);
-          toast.error("Erreur lors de la notation.", { id: loadingId });
+          toast.error("Erreur notation.", { id: loadingId });
       }
   };
 
-
-  // --- HELPERS UI ---
-  const handleRandomCase = () => handleServiceSelect(services[0], selectedDifficulty);
-  
-  const diagnosticTools = useMemo(() => {
-    if (!patientData) return [];
-    return [
-      { name: 'Température', icon: Thermometer, key: 'temperature' as keyof Patient, patientValue: patientData.temperature },
-      { name: 'Pression Art.', icon: Gauge, key: 'pressionArterielle' as keyof Patient, patientValue: patientData.pressionArterielle },
-      { name: 'Saturation O2', icon: Wind, key: 'saturationOxygene' as keyof Patient, patientValue: patientData.saturationOxygene },
-    ];
-  }, [patientData]);
-  
-  const handleToolClick = (tool: any) => {
-     setMessages(prev => [...prev, {
-         sender: 'system',
-         text: `${tool.name} : ${tool.patientValue || 'Non disponible'}`,
-         time: new Date().toLocaleTimeString(),
-         icon: tool.icon
-     }]);
+  // --- 6. NAVIGATION CAS SUIVANT ---
+  const handleNextCase = () => {
+      const nextId = caseSequenceId + 1;
+      setCaseSequenceId(nextId);
+      if (selectedService) {
+          handleServiceSelect(selectedService); // Relance le flow complet
+      }
   };
 
-  const handlePrescribeExam = (exam: ClinicalExam) => { 
-      let resultText = patientData?.analyseBiologique || exam.resultat; 
-      if (exam.name.includes("Clinique") && patientData?.examenClinique) resultText = patientData.examenClinique;
+  const checkProfanity = (txt: string) => PROFANITY_LIST.some(bw => txt.toLowerCase().includes(bw));
+  const tools = [
+      { name: 'Température', icon: Thermometer },
+      { name: 'Tension', icon: Gauge },
+      { name: 'SpO2', icon: Wind }
+  ];
 
-      setMessages(prev => [...prev, {
-        sender: 'system',
-        text: `Résultat ${exam.name} : ${resultText}`,
-        time: new Date().toLocaleTimeString(),
-        icon: exam.icon
-      }]);
-      setIsExamModalOpen(false); 
-  };
-
-  const resetSimulation = () => {
-     setCurrentView('home');
-     setPatientData(null);
-     setCurrentCaseId(null);
-     setMessages([]);
-     setMessageCount(0);
-     setUserDiagnosis('');
-     setGameState('asking');
-     setFinalResult(null);
-     setShowResultModal(false);
-  };
-
-    // 3. NOUVELLE FONCTION DE DETECTION (Protection simple)
-  const checkProfanity = (text: string): boolean => {
-    const lowerText = text.toLowerCase();
-    // On vérifie si le texte contient une des phrases interdites
-    return PROFANITY_LIST.some(badWord => lowerText.includes(badWord));
-  };
-  
+  const handleToolClick = (tool: any) => handlePrescribeExam(tool.name, "Prise de constante standard");
   return (
-    <div className="min-h-screen bg-[#052648] relative overflow-hidden font-sans text-slate-800">
-      <style jsx global>{`
+    <div className="min-h-screen bg-[#052648] relative font-sans text-slate-800">
+    <style jsx global>{`
         :root { --color-primary: #052648; --color-primary-dark: #031a31; }
         .bg-primary { background-color: var(--color-primary); }
         .text-primary { color: var(--color-primary); }
@@ -425,147 +369,121 @@ const MedicalSimulationPage = () => {
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
       `}</style>
-      
-      <header className="relative z-10 p-4 flex justify-between items-center text-white">
-          <Link href="/dashboard" className="flex items-center gap-2 font-bold text-xl"><Stethoscope/> FullTang</Link>
-          {currentView !== 'home' && (<button onClick={resetSimulation} className="p-2 bg-white/10 rounded-full hover:bg-white/20"><X size={20}/></button>)}
-      </header>
 
-      <main className="relative z-10 flex-1 flex items-center justify-center p-4">
-        {isLoading && (<div className="text-white text-xl animate-pulse">Chargement...</div>)}
+      <main className="flex-1 h-[calc(100vh-80px)] flex items-center justify-center p-4">
+        {isLoading && <div className="text-white animate-pulse">Initialisation du patient...</div>}
 
         {!isLoading && (
             <>
                 {currentView === 'home' && (
                      <HomeView 
-                        difficulty={selectedDifficulty} 
-                        onDifficultyChange={setSelectedDifficulty} 
+                        difficulty="Débutant" 
+                        onDifficultyChange={() => {}} 
                         onServiceSelect={handleServiceSelect} 
-                        onRandomCase={handleRandomCase} 
+                        onRandomCase={() => handleServiceSelect(services[0])} 
                      />
                 )}
 
-                {currentView === 'patientInfo' && patientData && selectedService && (
-                    <PatientInfoView 
-                        patientData={patientData} 
-                        selectedService={selectedService} 
-                        onStartConsultation={startConsultation} 
-                    />
-                )}
+                {/* NOTE: PatientInfoView est sauté dans ce flux pour aller vite, mais on pourrait l'ajouter */}
 
-                {currentView === 'consultation' && patientData && selectedService && (
+                {currentView === 'consultation' && selectedService && (
                     <ConsultationView
-                        patientData={patientData}
+                        patientData={patientData!} // Fake data initially
                         selectedService={selectedService}
                         messages={messages}
                         inputMessage={inputMessage}
                         onInputChange={setInputMessage}
                         onSendMessage={sendMessage}
                         messageCount={questionsCount}
-                        MAX_QUESTIONS={QUESTIONS_LIMIT}
-                        isTyping={isTyping}
-                        diagnosticTools={diagnosticTools}
-                        onToolClick={handleToolClick}
+                        MAX_QUESTIONS={MAX_QUESTIONS}
+                        diagnosticTools={tools as any}
                         clinicalExams={exampleExams} 
+                        
+                        // Exams Logic
                         isExamModalOpen={isExamModalOpen}
                         selectedExam={selectedExam}
                         onExamClick={(ex) => { setSelectedExam(ex); setIsExamModalOpen(true); }}
                         onCloseExamModal={() => setIsExamModalOpen(false)}
-                        onPrescribeExam={handlePrescribeExam}
-                        isGameOver={isGameOver}
+                        onPrescribeExam={(exam) => handlePrescribeExam(exam.name, "Examen standard")}
+                        
+                        // Game Logic
+                        isGameOver={gameState === 'finished'}
                         gameState={gameState}
-                        onReset={resetSimulation} 
+                        onReset={handleNextCase} 
+                        
+                        // Hints
                         remainingHints={MAX_HINTS - hintsUsed}
-                        onRequestHint={() => {
-                            if (hintsUsed < MAX_HINTS) {
-                                const newHint = hints[Math.floor(Math.random() * hints.length)];
-                                setMessages(prev => [...prev, { sender: 'system', text: `Indice: ${newHint}`, time: new Date().toLocaleTimeString(), icon: Lightbulb }]);
-                                setHintsUsed(p => p + 1);
-                            } else toast.error("Plus d'indices !");
-                        }}
+                        onRequestHint={requestHint}
+                        
+                        // Diagnosis
                         userDiagnosis={userDiagnosis}
                         setUserDiagnosis={setUserDiagnosis}
                         onTriggerDiagnosis={() => setGameState('diagnosing')}
                         onConfirmDiagnosis={() => {
-                            if(!userDiagnosis.trim()) return toast.error("Saisissez un diagnostic.");
+                            if(!userDiagnosis.trim()) return toast.error("Diagnostic requis.");
                             setGameState('treating');
                             setIsDrugModalOpen(true);
                         }}
+                        
+                        // Drugs
                         isDrugModalOpen={isDrugModalOpen}
                         onOpenDrugModal={() => setIsDrugModalOpen(true)}
                         onCloseDrugModal={() => setIsDrugModalOpen(false)}
                         onFinalPrescription={handleFinalPrescription}
+                        isTyping={isTyping}
+                        onToolClick={handleQuickTool}
                     />
                 )}
             </>
         )}
       </main>
       
-      {/* Result Modal - (Copie du code original, conservée pour le rendu complet) */}
+      {/* --- RESULT MODAL RESPONSIVE --- */}
       {showResultModal && finalResult && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-               <div className="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl relative overflow-hidden">
-                   <div className={`absolute top-0 left-0 right-0 h-2 ${finalResult.score >= 10 ? 'bg-green-500' : 'bg-red-500'}`} />
+           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
+               <div className="bg-white rounded-2xl w-full max-w-lg md:max-w-2xl lg:max-w-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
                    
-                   <div className="text-center mb-6">
-                       <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full border-4 mb-4 ${
-                           finalResult.score >= 10 
-                           ? 'border-green-100 bg-green-50 text-green-600' 
-                           : 'border-red-100 bg-red-50 text-red-600'
-                       }`}>
-                           <span className="text-3xl font-bold">{finalResult.score}</span>
-                           <span className="text-xs text-gray-500 absolute mt-8">/20</span>
+                   <div className={`h-2 w-full flex-shrink-0 ${finalResult.score >= 10 ? 'bg-green-500' : 'bg-red-500'}`} />
+                   
+                   <div className="p-6 md:p-8 overflow-y-auto">
+                       <div className="text-center mb-8">
+                           <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full border-4 mb-4 ${
+                               finalResult.score >= 10 ? 'border-green-100 bg-green-50 text-green-600' : 'border-red-100 bg-red-50 text-red-600'
+                           }`}>
+                               <span className="text-4xl font-bold">{finalResult.score}</span>
+                               <span className="text-xs text-gray-500 mt-1 ml-1">/20</span>
+                           </div>
+                           <h2 className="text-2xl font-bold text-gray-800">
+                               {finalResult.score >= 10 ? "Stage Validé !" : "Stage Non Validé"}
+                           </h2>
                        </div>
-                       
-                       <h2 className="text-2xl font-bold text-gray-800">
-                           {finalResult.score >= 10 ? "Bravo Docteur !" : "Échec de la simulation"}
-                       </h2>
-                       {finalResult.diagnosisStatus !== 'correct' && (
-                           <p className="text-red-500 font-semibold mt-2">Diagnostic incorrect</p>
-                       )}
+
+                       <div className="grid md:grid-cols-2 gap-6 text-left">
+                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                               <p className="text-xs text-slate-500 uppercase font-bold mb-2">Analyse du Professeur</p>
+                               <p className="text-sm text-slate-700 leading-relaxed italic">"{finalResult.feedback}"</p>
+                           </div>
+                           
+                           {finalResult.missedSteps && finalResult.missedSteps.length > 0 && (
+                               <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                                   <p className="text-xs text-amber-700 uppercase font-bold mb-2">Points manqués</p>
+                                   <ul className="text-sm text-amber-800 space-y-1 list-disc pl-4">
+                                       {finalResult.missedSteps.map((step, i) => <li key={i}>{step}</li>)}
+                                   </ul>
+                               </div>
+                           )}
+                       </div>
                    </div>
 
-                   <div className="space-y-4 mb-8 text-left">
-                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                           <p className="text-xs text-slate-500 uppercase font-bold mb-1">Diagnostic attendu</p>
-                           <p className="font-semibold text-primary">{patientData?.diagnostic}</p>
-                       </div>
-                       
-                       <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                           <p className="text-xs text-blue-500 uppercase font-bold mb-1 flex items-center gap-1">
-                               <Stethoscope size={12} /> Feedback du Professeur
-                           </p>
-                           <p className="text-sm text-slate-700 italic">"{finalResult.feedback}"</p>
-                       </div>
-
-                       {finalResult.missedSteps && finalResult.missedSteps.length > 0 && (
-                           <div className="text-sm text-amber-700 bg-amber-50 p-3 rounded-lg">
-                               <strong>Points manqués :</strong>
-                               <ul className="list-disc pl-4 mt-1">
-                                   {finalResult.missedSteps.map((step, i) => <li key={i}>{step}</li>)}
-                               </ul>
-                           </div>
-                       )}
-                   </div>
-
-                   <div className="flex flex-col gap-3">
-                       {finalResult.score < 10 ? (
-                           <button onClick={handleRandomCase}
-                               className="w-full bg-red-600 text-white py-3.5 rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg hover:shadow-red-500/30 flex items-center justify-center gap-2">
-                               <RefreshCcw size={18} /> Répéter le stage (Note &lt; 10)
-                           </button>
-                       ) : (
-                           <div className="grid grid-cols-2 gap-3">
-                               <button onClick={resetSimulation} 
-                                   className="px-4 py-3 text-slate-600 font-semibold hover:bg-slate-100 rounded-xl transition-colors">
-                                   Fermer
-                               </button>
-                               <Link href="/dashboard" 
-                                   className="px-4 py-3 bg-[#052648] text-white font-bold rounded-xl hover:bg-[#0a4d8f] transition-all flex items-center justify-center">
-                                   Tableau de bord
-                               </Link>
-                           </div>
-                       )}
+                   <div className="p-6 border-t bg-gray-50 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                       <button onClick={() => {setShowResultModal(false); setCurrentView('home');}} className="text-slate-500 hover:text-primary font-medium text-sm">
+                           Retour au menu
+                       </button>
+                       <button onClick={handleNextCase} 
+                           className="w-full sm:w-auto px-8 py-3 bg-[#052648] text-white font-bold rounded-xl hover:bg-[#0a4d8f] transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl">
+                           <RefreshCcw size={18} />
+                           Cas Suivant (N°{caseSequenceId + 1})
+                       </button>
                    </div>
                </div>
            </div>
@@ -1368,161 +1286,157 @@ FICHIER: D:\5GI\STI\fulltang-sti\app\api\chat\route.ts
 import { NextResponse } from 'next/server';
 
 // Configuration
+// Assure-toi que ton backend FastAPI tourne sur ce port
 const RAG_SERVICE_URL = "http://127.0.0.1:8000/api/v1"; 
-
-// ID de TEST (pour contourner l'erreur 422 du Python si on envoie un UUID)
-const TEST_CASE_ID = 1040; 
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { 
         mode, 
-        userMessage, // Le message actuel
-        messages,    // L'historique
-        caseId: frontCaseId, 
+        userMessage, // Message actuel
+        messages,    // Historique
+        caseId,      // ID venant du front
         learnerId,
         userDiagnosis, 
-        userPrescription 
+        userPrescription,
+        examName,    // Pour mode exam
+        examReason
     } = body;
 
-    // --- LOGS DIAGNOSTIC (Coté Serveur) ---
-    console.log(`\n🔵 [PROXY: IN] Mode: ${mode}`);
-    
-    // Pour le RAG, on utilise l'ID de test si l'ID du front est un string (UUID)
-    // Sinon on essaie de le parser.
-    let backendCaseId = TEST_CASE_ID;
-    
-    // --- 1. MODE CONVERSATION (RAG) ---
+    // Conversion ID cas : si null ou non numérique, fallback 1040
+    const backendCaseId = caseId ? parseInt(caseId) : 1040;
+
+    // --- LOGS SERVER SIDE ---
+    console.log(`\n🔵 [PROXY REQUEST] Mode: ${mode} | CaseID: ${backendCaseId}`);
+
+    // =========================================================================
+    // 1. MODE CHAT (Discussion Patient)
+    // =========================================================================
     if (mode === 'chat') {
-        const prompt = userMessage; 
+        const payload = { 
+            prompt: userMessage, 
+            messages: messages, // On passe l'historique pour contexte
+            mode: 'chat',
+            learner_id: learnerId 
+        };
 
-        console.log(`🔌 [PROXY->PYTHON] Appel: POST ${RAG_SERVICE_URL}/chat/${backendCaseId}`);
-        console.log(`   Prompt: "${prompt}"`);
+        const res = await fetch(`${RAG_SERVICE_URL}/chat/${backendCaseId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-        try {
-            const ragRes = await fetch(`${RAG_SERVICE_URL}/chat/${backendCaseId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: prompt })
-            });
-
-            // Lecture brute pour debug
-            const responseText = await ragRes.text();
-            console.log(`🔌 [PYTHON RESPONSE] Status: ${ragRes.status}`);
-            console.log(`   Body Brut:`, responseText);
-
-            if (!ragRes.ok) {
-                // Erreur côté Python
-                return NextResponse.json({ 
-                    content: `⚠️ Erreur Cerveau (${ragRes.status}): ${responseText.substring(0, 100)}` 
-                });
-            }
-
-            // Parsing JSON
-            let ragData;
-            try {
-                ragData = JSON.parse(responseText);
-            } catch(e) {
-                // Si ce n'est pas du JSON, c'est peut-être la réponse brute
-                console.log("   Réponse non JSON, utilisation du texte brut.");
-                ragData = { content: responseText };
-            }
-
-            // Extraction robuste de la réponse
-            // Le backend Python peut renvoyer { "response":... }, { "content":... } ou { "answer":... }
-            const patientReply = ragData.response || ragData.content || ragData.answer || null;
-
-            if (!patientReply) {
-                 console.warn("⚠️ Aucune clé valide trouvée dans:", Object.keys(ragData));
-                 return NextResponse.json({ content: "..." }); // Silence
-            }
-
-            return NextResponse.json({ content: patientReply });
-
-        } catch (error: any) {
-            console.error("❌ Erreur Fetch Proxy:", error.message);
-            return NextResponse.json({ content: "(Problème de connexion au patient)" });
-        }
+        const data = await res.json();
+        return NextResponse.json(data);
     }
 
-   // =========================================================================
-    // MODE 2 : ÉVALUATION / NOTATION (GRADE) - NOUVELLE LOGIQUE
+    // =========================================================================
+    // 2. MODE ANALYZE (Tuteur - Feu Tricolore) - NOUVEAU
+    // =========================================================================
+    else if (mode === 'analyze') {
+        const payload = {
+            case_id: backendCaseId,
+            user_message: userMessage,
+            history: messages // Pour juger de la pertinence vs ce qui a déjà été dit
+        };
+
+        const res = await fetch(`${RAG_SERVICE_URL}/tutor/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            // Fallback si le tuteur plante
+            return NextResponse.json({ status: 'good', justification: "Analyse indisponible." });
+        }
+
+        const data = await res.json(); 
+        // data attendu: { "status": "good" | "warning", "justification": "..." }
+        return NextResponse.json(data);
+    }
+
+    // =========================================================================
+    // 3. MODE EXAM (Résultats Médicaux) - NOUVEAU
+    // =========================================================================
+    else if (mode === 'exam') {
+        const payload = {
+            case_id: backendCaseId,
+            exam_name: examName,
+            exam_reason: examReason || ""
+        };
+
+        const res = await fetch(`${RAG_SERVICE_URL}/tools/exam`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            return NextResponse.json({ 
+                resultat: "Le laboratoire n'a pas pu traiter cet échantillon." 
+            });
+        }
+
+        const data = await res.json();
+        // data attendu: { "exam_name": "...", "resultat": "..." }
+        return NextResponse.json(data);
+    }
+
+    // =========================================================================
+    // 4. MODE GRADE (Evaluation Finale)
     // =========================================================================
     else if (mode === 'grade') {
-        const url = `${RAG_SERVICE_URL}/evaluate/`;
-        
-        // Structure correspondant exactement au Pydantic `EvaluationRequest`
         const evalPayload = {
             case_id: backendCaseId,
             learner_id: learnerId ? learnerId.toString() : "anonymous",
-            messages: messages, // { sender, text, time }
-            user_diagnosis: userDiagnosis || "Aucun diagnostic",
-            user_prescription: userPrescription || "Aucun traitement"
+            messages: messages,
+            user_diagnosis: userDiagnosis,
+            user_prescription: userPrescription
         };
-        
-        console.log(`📝 [TO PYTHON EVAL] Envoi pour notation sur ${url}`);
 
-        const backendRes = await fetch(url, {
+        const res = await fetch(`${RAG_SERVICE_URL}/evaluate/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(evalPayload)
         });
 
-        const txtRes = await backendRes.text();
+        if (!res.ok) throw new Error("Erreur grading backend");
         
-        if (!backendRes.ok) {
-            console.error("❌ Erreur Python Eval:", txtRes);
-            return NextResponse.json({ 
-                score: 0, 
-                feedback: "Erreur serveur lors de la correction : " + txtRes, 
-                diagnosisStatus: 'incorrect' 
-            });
-        }
-
-        const jsonRes = JSON.parse(txtRes);
-        console.log("✅ [FROM PYTHON EVAL]", jsonRes);
-
-        return NextResponse.json(jsonRes);
+        const data = await res.json();
+        return NextResponse.json(data);
     }
-    
 
-// =========================================================================
-    // 3. MODE INDICE (HINT) - APPEL IA TUTEUR
+    // =========================================================================
+    // 5. MODE HINT (Indice)
     // =========================================================================
     else if (mode === 'hint') {
-         console.log(`💡 [PROXY] Demande indice au backend Python (/hint)`);
-         
          const payload = {
              case_id: backendCaseId,
              learner_id: learnerId ? learnerId.toString() : "anonymous",
-             messages: messages // Envoi historique pour analyse
+             messages: messages 
          };
 
-         const hintRes = await fetch(`${RAG_SERVICE_URL}/hint/`, {
+         const res = await fetch(`${RAG_SERVICE_URL}/hint/`, {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify(payload)
          });
 
-         if (!hintRes.ok) {
-             const err = await hintRes.text();
-             console.error("Erreur Python Hint:", err);
-             // Fallback côté Next si le Python échoue
-             return NextResponse.json({ content: "Pensez à vérifier les antécédents." });
+         if (!res.ok) {
+             return NextResponse.json({ content: "Revenez aux bases de la sémiologie." });
          }
 
-         const data = await hintRes.json();
-         // Le Python renvoie { "content": "..." }
+         const data = await res.json();
          return NextResponse.json({ content: data.content });
     }
 
-
-    return NextResponse.json({ error: "Mode invalide" }, { status: 400 });
+    return NextResponse.json({ error: "Mode inconnu" }, { status: 400 });
 
   } catch (error: any) {
-    console.error("🔥 CRASH PROXY:", error);
-    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    console.error("🔥 PROXY ERROR:", error);
+    return NextResponse.json({ error: "Erreur serveur interne", details: error.message }, { status: 500 });
   }
 }
 
@@ -3443,18 +3357,6 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\pages\_error\client-build-mani
 
 
 ================================================================================
-FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\next-font-manifest.json
-================================================================================
-
-{
-  "app": {},
-  "appUsingSizeAdjust": false,
-  "pages": {},
-  "pagesUsingSizeAdjust": false
-}
-
-
-================================================================================
 FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\middleware-manifest.json
 ================================================================================
 
@@ -3467,6 +3369,18 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\middleware-manifest.json
 
 
 ================================================================================
+FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\next-font-manifest.json
+================================================================================
+
+{
+  "app": {},
+  "appUsingSizeAdjust": false,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}
+
+
+================================================================================
 FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\app-paths-manifest.json
 ================================================================================
 
@@ -3474,16 +3388,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\app-paths-manifest.json
   "/api/chat/route": "app/api/chat/route.js",
   "/connexion/page": "app/connexion/page.js",
   "/dashboard/page": "app/dashboard/page.js",
+  "/inscription/page": "app/inscription/page.js",
   "/page": "app/page.js",
   "/simulation/page": "app/simulation/page.js"
 }
-
-
-================================================================================
-FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\pages-manifest.json
-================================================================================
-
-{}
 
 
 ================================================================================
@@ -3495,6 +3403,13 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\server-reference-manifest.json
   "edge": {},
   "encryptionKey": "X2bdywMv+0yBFtplaYo5AyZR+VtzNk/rW+kqfJCwVLE="
 }
+
+
+================================================================================
+FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\server\pages-manifest.json
+================================================================================
+
+{}
 
 
 ================================================================================
@@ -10489,6 +10404,7 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     --tracking-wider: .05em;
     --tracking-widest: .1em;
     --leading-tight: 1.25;
+    --leading-snug: 1.375;
     --leading-relaxed: 1.625;
     --radius-sm: .25rem;
     --radius-md: .375rem;
@@ -10501,6 +10417,7 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     --animate-spin: spin 1s linear infinite;
     --animate-ping: ping 1s cubic-bezier(0, 0, .2, 1) infinite;
     --animate-pulse: pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;
+    --animate-bounce: bounce 1s infinite;
     --blur-xs: 4px;
     --blur-sm: 8px;
     --blur-md: 12px;
@@ -11149,6 +11066,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     margin: calc(var(--spacing) * 4);
   }
 
+  .mx-1 {
+    margin-inline: calc(var(--spacing) * 1);
+  }
+
   .mx-2 {
     margin-inline: calc(var(--spacing) * 2);
   }
@@ -11159,6 +11080,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .mx-auto {
     margin-inline: auto;
+  }
+
+  .my-2 {
+    margin-block: calc(var(--spacing) * 2);
   }
 
   .my-4 {
@@ -11445,6 +11370,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     height: 600px;
   }
 
+  .h-\[calc\(100vh-80px\)\] {
+    height: calc(100vh - 80px);
+  }
+
   .h-auto {
     height: auto;
   }
@@ -11481,6 +11410,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     max-height: calc(var(--spacing) * 96);
   }
 
+  .max-h-\[90vh\] {
+    max-height: 90vh;
+  }
+
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
   }
@@ -11515,6 +11448,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .w-1\.5 {
     width: calc(var(--spacing) * 1.5);
+  }
+
+  .w-1\/3 {
+    width: 33.3333%;
   }
 
   .w-1\/5 {
@@ -11621,6 +11558,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     width: calc(var(--spacing) * 96);
   }
 
+  .w-fit {
+    width: fit-content;
+  }
+
   .w-full {
     width: 100%;
   }
@@ -11657,6 +11598,18 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     max-width: 75%;
   }
 
+  .max-w-\[80\%\] {
+    max-width: 80%;
+  }
+
+  .max-w-\[85\%\] {
+    max-width: 85%;
+  }
+
+  .max-w-\[90\%\] {
+    max-width: 90%;
+  }
+
   .max-w-lg {
     max-width: var(--container-lg);
   }
@@ -11671,6 +11624,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .max-w-xl {
     max-width: var(--container-xl);
+  }
+
+  .min-w-\[120px\] {
+    min-width: 120px;
   }
 
   .flex-1 {
@@ -11782,6 +11739,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     transform: var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, );
   }
 
+  .animate-bounce {
+    animation: var(--animate-bounce);
+  }
+
   .animate-ping {
     animation: var(--animate-ping);
   }
@@ -11856,6 +11817,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .flex-row {
     flex-direction: row;
+  }
+
+  .flex-row-reverse {
+    flex-direction: row-reverse;
   }
 
   .flex-wrap {
@@ -12106,6 +12071,11 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     border-top-right-radius: var(--radius-lg);
   }
 
+  .rounded-t-xl {
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
+  }
+
   .rounded-r-full {
     border-top-right-radius: 3.40282e38px;
     border-bottom-right-radius: 3.40282e38px;
@@ -12126,8 +12096,16 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     border-bottom-left-radius: var(--radius-xl);
   }
 
+  .rounded-br-none {
+    border-bottom-right-radius: 0;
+  }
+
   .rounded-br-sm {
     border-bottom-right-radius: var(--radius-sm);
+  }
+
+  .rounded-bl-none {
+    border-bottom-left-radius: 0;
   }
 
   .rounded-bl-sm {
@@ -12194,6 +12172,11 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     border-left-width: 1px;
   }
 
+  .border-l-4 {
+    border-left-style: var(--tw-border-style);
+    border-left-width: 4px;
+  }
+
   .border-l-8 {
     border-left-style: var(--tw-border-style);
     border-left-width: 8px;
@@ -12215,6 +12198,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .border-\[\#052648\] {
     border-color: #052648;
+  }
+
+  .border-amber-100 {
+    border-color: var(--color-amber-100);
   }
 
   .border-amber-200 {
@@ -12575,6 +12562,16 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     }
   }
 
+  .bg-blue-50\/50 {
+    background-color: #eff6ff80;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-blue-50\/50 {
+      background-color: color-mix(in oklab, var(--color-blue-50) 50%, transparent);
+    }
+  }
+
   .bg-blue-100 {
     background-color: var(--color-blue-100);
   }
@@ -12801,6 +12798,16 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     background-color: var(--color-slate-50);
   }
 
+  .bg-slate-50\/30 {
+    background-color: #f8fafc4d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-slate-50\/30 {
+      background-color: color-mix(in oklab, var(--color-slate-50) 30%, transparent);
+    }
+  }
+
   .bg-slate-50\/50 {
     background-color: #f8fafc80;
   }
@@ -12821,6 +12828,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .bg-slate-300 {
     background-color: var(--color-slate-300);
+  }
+
+  .bg-slate-400 {
+    background-color: var(--color-slate-400);
   }
 
   .bg-slate-500 {
@@ -13585,6 +13596,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     font-size: 10px;
   }
 
+  .text-\[11px\] {
+    font-size: 11px;
+  }
+
   .leading-none {
     --tw-leading: 1;
     line-height: 1;
@@ -13593,6 +13608,11 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   .leading-relaxed {
     --tw-leading: var(--leading-relaxed);
     line-height: var(--leading-relaxed);
+  }
+
+  .leading-snug {
+    --tw-leading: var(--leading-snug);
+    line-height: var(--leading-snug);
   }
 
   .leading-tight {
@@ -13995,6 +14015,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     opacity: .5;
   }
 
+  .opacity-60 {
+    opacity: .6;
+  }
+
   .opacity-70 {
     opacity: .7;
   }
@@ -14053,6 +14077,11 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .shadow-none {
+    --tw-shadow: 0 0 #0000;
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
   .shadow-sm {
     --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, #0000001a), 0 1px 2px -1px var(--tw-shadow-color, #0000001a);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -14060,6 +14089,11 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .shadow-xl {
     --tw-shadow: 0 20px 25px -5px var(--tw-shadow-color, #0000001a), 0 8px 10px -6px var(--tw-shadow-color, #0000001a);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .ring-1 {
+    --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
@@ -14154,6 +14188,16 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   @supports (color: color-mix(in lab, red, red)) {
     .shadow-blue-500\/50 {
       --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-blue-500) 50%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+
+  .shadow-blue-900\/10 {
+    --tw-shadow-color: #1c398e1a;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .shadow-blue-900\/10 {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-blue-900) 10%, transparent) var(--tw-shadow-alpha), transparent);
     }
   }
 
@@ -14361,6 +14405,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     }
   }
 
+  .ring-slate-200 {
+    --tw-ring-color: var(--color-slate-200);
+  }
+
   .ring-white {
     --tw-ring-color: var(--color-white);
   }
@@ -14480,6 +14528,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
 
   .delay-75 {
     transition-delay: 75ms;
+  }
+
+  .delay-150 {
+    transition-delay: .15s;
   }
 
   .delay-700 {
@@ -14684,6 +14736,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   .file\:font-medium::file-selector-button {
     --tw-font-weight: var(--font-weight-medium);
     font-weight: var(--font-weight-medium);
+  }
+
+  .placeholder\:text-slate-400::placeholder {
+    color: var(--color-slate-400);
   }
 
   .placeholder\:text-slate-500::placeholder {
@@ -15045,8 +15101,20 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   }
 
   @media (hover: hover) {
+    .hover\:opacity-80:hover {
+      opacity: .8;
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:opacity-90:hover {
       opacity: .9;
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:opacity-100:hover {
+      opacity: 1;
     }
   }
 
@@ -15101,6 +15169,10 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     border-color: #052648;
   }
 
+  .focus\:border-blue-500:focus {
+    border-color: var(--color-blue-500);
+  }
+
   .focus\:border-transparent:focus {
     border-color: #0000;
   }
@@ -15125,6 +15197,16 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   @supports (color: lab(0% 0 0)) {
     .focus\:ring-\[\#052648\]\/20:focus {
       --tw-ring-color: lab(14.491% -.285 -25.0205 / .2);
+    }
+  }
+
+  .focus\:ring-blue-500\/20:focus {
+    --tw-ring-color: #3080ff33;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-blue-500\/20:focus {
+      --tw-ring-color: color-mix(in oklab, var(--color-blue-500) 20%, transparent);
     }
   }
 
@@ -15188,6 +15270,15 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     opacity: .5;
   }
 
+  .disabled\:opacity-60:disabled {
+    opacity: .6;
+  }
+
+  .disabled\:shadow-none:disabled {
+    --tw-shadow: 0 0 #0000;
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
   .disabled\:grayscale:disabled {
     --tw-grayscale: grayscale(100%);
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
@@ -15196,6 +15287,12 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   @media (hover: hover) {
     .disabled\:hover\:bg-\[\#052648\]:disabled:hover {
       background-color: #052648;
+    }
+  }
+
+  @media (min-width: 40rem) {
+    .sm\:w-auto {
+      width: auto;
     }
   }
 
@@ -15244,6 +15341,12 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   @media (min-width: 48rem) {
     .md\:w-auto {
       width: auto;
+    }
+  }
+
+  @media (min-width: 48rem) {
+    .md\:max-w-2xl {
+      max-width: var(--container-2xl);
     }
   }
 
@@ -15313,6 +15416,13 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
     }
   }
 
+  @media (min-width: 48rem) {
+    .md\:text-base {
+      font-size: var(--text-base);
+      line-height: var(--tw-leading, var(--text-base--line-height));
+    }
+  }
+
   @media (min-width: 64rem) {
     .lg\:col-span-1 {
       grid-column: span 1 / span 1;
@@ -15340,6 +15450,12 @@ FICHIER: D:\5GI\STI\fulltang-sti\.next\dev\static\chunks\app_globals_71f961d1.cs
   @media (min-width: 64rem) {
     .lg\:flex {
       display: flex;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .lg\:max-w-3xl {
+      max-width: var(--container-3xl);
     }
   }
 
@@ -15773,6 +15889,18 @@ body {
 @keyframes pulse {
   50% {
     opacity: .5;
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    animation-timing-function: cubic-bezier(.8, 0, 1, 1);
+    transform: translateY(-25%);
+  }
+
+  50% {
+    animation-timing-function: cubic-bezier(0, 0, .2, 1);
+    transform: none;
   }
 }
 
@@ -16332,7 +16460,7 @@ FICHIER: D:\5GI\STI\fulltang-sti\components\simulation\ChatWindow.tsx
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { User, Stethoscope, UserRound, FileText, Send, Lightbulb, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { User, Stethoscope, FileText, Send, Lightbulb, MoreHorizontal, AlertTriangle, CheckCircle2, MessageCircleQuestion } from 'lucide-react';
 import { Message, Patient, Service } from '@/types/simulation/types';
 
 interface ChatWindowProps {
@@ -16343,12 +16471,40 @@ interface ChatWindowProps {
   onInputChange: (value: string) => void;
   onSendMessage: () => void;
   messageCount: number;
+  MAX_QUESTIONS: number;
   isGameOver: boolean;
   onReset: () => void;
   onShowPatientInfo: () => void;
-  isTyping?: boolean; // AJOUT
+  isTyping?: boolean;
 }
 
+// --- SOUS-COMPOSANT : Feedback Visuel du Tuteur (Le Badge Vert/Jaune) ---
+const MessageFeedback = ({ status, reason }: { status?: string, reason?: string }) => {
+    // On n'affiche rien si pas de statut ou statut neutre
+    if (!status || status === 'neutral') return null;
+    
+    // Détermine si c'est positif ou "warning"
+    const isGood = status === 'good';
+    
+    return (
+        <div className={`mt-2 text-xs p-2 rounded-lg flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-300 ${
+            isGood 
+            ? 'bg-green-100 text-green-800 border-l-4 border-green-500' 
+            : 'bg-amber-100 text-amber-800 border-l-4 border-amber-500'
+        }`}>
+            {isGood ? (
+                <CheckCircle2 size={14} className="mt-0.5 flex-shrink-0"/> 
+            ) : ( 
+                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0"/>
+            )}
+            <span className="leading-snug">
+                {reason || (isGood ? "Question pertinente." : "Attention, peu pertinent.")}
+            </span>
+        </div>
+    );
+};
+
+// --- COMPOSANT PRINCIPAL ---
 const ChatWindow: React.FC<ChatWindowProps> = ({
   patientData,
   selectedService,
@@ -16357,6 +16513,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onInputChange,
   onSendMessage,
   messageCount,
+  MAX_QUESTIONS = 10,
   isGameOver,
   onReset,
   onShowPatientInfo,
@@ -16368,153 +16525,203 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
   
-  useEffect(scrollToBottom, [messages]);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
 
-  const questionsRemaining = 10 - messageCount;
-  const progressBarWidth = (questionsRemaining / 10) * 100;
+  const progressBarWidth = Math.min((messageCount / MAX_QUESTIONS) * 100, 100);
 
   return (
-    <div className="w-full h-[600px] flex flex-col bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden">
+    <div className="w-full h-[600px] flex flex-col bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden relative">
       
-      {/* En-tête moderne et épuré */}
-      <div className="flex-shrink-0 p-5 border-b border-gray-100 bg-white">
-        <button onClick={onShowPatientInfo} className="w-full text-left group">
-          <div className="flex items-center gap-4">
+      {/* 1. EN-TÊTE : Infos Patient + Progression */}
+      <div className="flex-shrink-0 p-4 border-b border-gray-100 bg-white z-10 flex justify-between items-center">
+        <button onClick={onShowPatientInfo} className="flex items-center gap-4 group transition-opacity hover:opacity-80">
             <div className="relative">
               <img 
                 src="/images/patient.jpeg" 
                 alt={patientData.nom}
                 className="w-12 h-12 rounded-full object-cover border-2 border-[#052648]"
+                onError={(e) => { (e.target as HTMLImageElement).src = 'https://ui-avatars.com/api/?name=Patient&background=random' }}
               />
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white"></div>
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white animate-pulse"></div>
             </div>
-            <div className="flex-1">
-              <h3 className="text-[#052648] font-semibold text-base">{patientData.nom}</h3>
-              <p className="text-gray-500 text-sm">Service {selectedService.name}</p>
+            <div className="text-left">
+              <h3 className="text-[#052648] font-bold text-sm md:text-base">{patientData.nom}</h3>
+              <p className="text-gray-500 text-xs flex items-center gap-1">
+                 <FileText size={10}/> {selectedService.name}
+              </p>
             </div>
-            <FileText className="w-5 h-5 text-gray-400 group-hover:text-[#052648] transition-colors" />
-          </div>
         </button>
+
+        <div className="flex flex-col items-end w-1/3">
+            <div className="text-xs font-semibold text-slate-500 mb-1">
+                Questions: <span className={messageCount >= MAX_QUESTIONS ? "text-red-500" : "text-[#052648]"}>{messageCount}</span> / {MAX_QUESTIONS}
+            </div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                    className={`h-full transition-all duration-500 ease-out ${
+                        messageCount >= MAX_QUESTIONS ? 'bg-red-500' : 'bg-[#052648]'
+                    }`}
+                    style={{ width: `${progressBarWidth}%` }}
+                />
+            </div>
+        </div>
       </div>
 
-      {/* Zone des messages avec hauteur fixe et scroll */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gray-50 min-h-0">
-
+      {/* 2. ZONE DE MESSAGES SCROLLABLE */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/50 scrollbar-thin scrollbar-thumb-gray-300">
+        
         {messages.map((msg, index) => {
+          // --- TYPE 1: MESSAGE SYSTÈME / ALERTE ---
           if (msg.sender === 'system') {
-            const isBad = msg.quality === 'bad'; // Déclenché si Gros Mot par ex
+            const isBad = msg.quality === 'bad';
             return (
-              <div key={index} className={`flex justify-center my-4 animate-pulse`}>
-                  <span className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 ${
-                      isBad ? 'bg-red-100 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-500'
+              <div key={index} className="flex justify-center my-2 opacity-80 hover:opacity-100 transition-opacity">
+                  <span className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 border shadow-sm ${
+                      isBad 
+                      ? 'bg-red-50 text-red-600 border-red-100' 
+                      : 'bg-slate-100 text-slate-500 border-slate-200'
                   }`}>
-                      {isBad && <AlertTriangle size={14} />} {msg.text}
+                      {msg.isAction ? <FileText size={12}/> : (isBad ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />)} 
+                      {msg.text}
                   </span>
               </div>
-            )
+            );
           }
 
+          // --- TYPE 2: INDICE DU TUTEUR ---
           if (msg.sender === 'tutor') {
               return (
-                  <div key={index} className="flex justify-center my-4">
-                      <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg max-w-sm flex gap-3 shadow-sm">
-                          <div className="bg-amber-100 p-2 rounded-full h-fit"><Lightbulb size={18} className="text-amber-600"/></div>
+                  <div key={index} className="flex justify-center my-4 animate-bounce-in">
+                      <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl max-w-sm flex gap-3 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="bg-amber-100 p-2 rounded-full h-fit flex-shrink-0 text-amber-600">
+                              <Lightbulb size={20} strokeWidth={2.5}/>
+                          </div>
                           <div>
-                              <p className="text-amber-800 text-xs font-bold mb-1">CONSEIL DU TUTEUR</p>
-                              <p className="text-amber-900 text-sm italic">"{msg.text}"</p>
+                              <p className="text-amber-800 text-xs font-bold mb-1 uppercase tracking-wide">Conseil du Tuteur</p>
+                              <p className="text-amber-900 text-sm italic leading-relaxed">"{msg.text}"</p>
                           </div>
                       </div>
                   </div>
-              )
+              );
           }
           
           const isDoctor = msg.sender === 'doctor';
+
+          // --- TYPE 3: ECHANGE DOCTEUR / PATIENT ---
           return (
-            <div key={index} className={`flex items-end gap-2.5 ${isDoctor ? 'justify-end' : 'justify-start'}`}>
-              {!isDoctor && (
-                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                  <User className="w-4 h-4 text-gray-600" />
+            <div key={index} className={`flex w-full ${isDoctor ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
+                <div className={`flex items-end gap-2.5 max-w-[85%] ${isDoctor ? 'flex-row-reverse' : 'flex-row'}`}>
+                    
+                    {/* Avatar */}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${
+                        isDoctor ? 'bg-[#052648] text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                        {isDoctor ? <Stethoscope size={16} /> : <User size={16} />}
+                    </div>
+
+                    <div className="flex flex-col gap-1 min-w-[120px]">
+                        {/* Bulle de message */}
+                        <div className={`px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
+                            isDoctor
+                            ? 'bg-[#052648] text-white rounded-br-none'
+                            : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
+                        }`}>
+                            {msg.text}
+                        </div>
+
+                        {/* --- INJECTION DU FEEDBACK TUTEUR (Sous le message Docteur) --- */}
+                        {isDoctor && msg.feedback && (
+                            <MessageFeedback status={msg.quality} reason={msg.feedback} />
+                        )}
+
+                        {/* Horodatage */}
+                        <span className={`text-[10px] opacity-60 ${isDoctor ? 'text-right' : 'text-left'}`}>
+                            {msg.time}
+                        </span>
+                    </div>
                 </div>
-              )}
-              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
-                isDoctor
-                  ? 'bg-[#052648] text-white rounded-br-sm'
-                  : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
-              }`}>
-                <p className="text-sm leading-relaxed">{msg.text}</p>
-                <p className={`text-xs mt-1.5 ${isDoctor ? 'text-blue-200' : 'text-gray-400'}`}>
-                  {msg.time}
-                </p>
-              </div>
-              {isDoctor && (
-                <div className="w-8 h-8 rounded-full bg-[#052648] flex items-center justify-center flex-shrink-0">
-                  <Stethoscope className="w-4 h-4 text-white" />
-                </div>
-              )}
             </div>
           );
         })}
 
-                        {/* NOUVEAU : Indicateur de frappe IA */}
+        {/* --- INDICATEUR DE FRAPPE (PATIENT) --- */}
         {isTyping && (
-            <div className="flex items-start gap-2.5">
-               <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 animate-pulse">
-                  <User className="w-4 h-4 text-gray-600" />
-               </div>
-               <div className="bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-                  <MoreHorizontal className="w-5 h-5 text-gray-400 animate-pulse" />
+            <div className="flex w-full justify-start animate-in fade-in duration-300">
+               <div className="flex items-end gap-2.5 max-w-[85%]">
+                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 animate-pulse">
+                      <User size={16} className="text-gray-500" />
+                   </div>
+                   <div className="bg-white border border-gray-100 px-4 py-3 rounded-2xl rounded-bl-none shadow-sm">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+                      </div>
+                   </div>
                </div>
             </div>
         )}
-        <div ref={messagesEndRef} />
         
+        {/* Ancre pour scroll automatique */}
+        <div ref={messagesEndRef} />
+
+        {/* Message de fin si GameOver */}
         {isGameOver && (
-          <div className="text-center p-4 bg-red-50 text-red-700 rounded-xl border border-red-200">
-            <p className="font-semibold text-sm">Simulation terminée</p>
-            <p className="text-xs mt-1">Vous avez utilisé toutes vos questions.</p>
-            <button onClick={onReset} className="mt-3 text-sm text-[#052648] hover:underline font-medium">
-              Recommencer un cas
+          <div className="mx-auto max-w-sm mt-8 p-4 bg-red-50 text-red-800 rounded-xl border border-red-200 text-center animate-pulse">
+            <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-red-500" />
+            <p className="font-bold text-sm">Consultation Terminée</p>
+            <p className="text-xs mt-1">Veuillez formuler votre diagnostic final.</p>
+            <button onClick={onReset} className="mt-3 text-xs bg-white border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+              Réinitialiser
             </button>
           </div>
         )}
       </div>
 
-      {/* Zone de saisie épurée */}
-      <div className="p-4 border-t border-gray-100 bg-white flex-shrink-0">
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600">Questions restantes</p>
-            <p className="text-xs font-semibold text-[#052648]">{questionsRemaining} / 10</p>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div 
-              className="bg-[#052648] h-2 rounded-full transition-all duration-500" 
-              style={{width: `${progressBarWidth}%`}}>
-            </div>
-          </div>
-        </div>
+      {/* 3. ZONE DE SAISIE */}
+      <div className="p-4 bg-white border-t border-gray-100 z-10">
         
-        <div className="flex gap-2 items-center">
+        {/* Petit rappel pour la phase tutorée */}
+        {messageCount < 5 && (
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-blue-600 animate-fade-in bg-blue-50 w-fit px-2 py-1 rounded-md">
+                <MessageCircleQuestion size={12} /> 
+                Mode Tutoré actif : Vos questions sont analysées par l'IA.
+            </div>
+        )}
+
+        <div className="flex gap-3 items-center">
           <input 
             type="text" 
             value={inputMessage}
             onChange={(e) => onInputChange(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !isGameOver && inputMessage.trim() && onSendMessage()}
-            placeholder={isGameOver ? "Limite atteinte" : "Posez une question au patient..."}
+            onKeyDown={(e) => e.key === 'Enter' && !isGameOver && !isTyping && inputMessage.trim() && onSendMessage()}
+            placeholder={isGameOver ? "La consultation est terminée." : "Posez une question au patient..."}
             disabled={isGameOver || isTyping}
-            className="flex-1 px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-200 focus:border-[#052648] focus:bg-white focus:outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
+            className="flex-1 px-4 py-3 bg-slate-50 hover:bg-slate-100 focus:bg-white rounded-xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-[#052648] outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed text-sm text-slate-800 placeholder:text-slate-400"
+            autoFocus
           />
           <button 
             onClick={onSendMessage} 
-            disabled={isGameOver || !inputMessage.trim()}
-            className="p-2.5 bg-[#052648] text-white rounded-lg hover:bg-[#063a5f] active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#052648]">
+            disabled={isGameOver || !inputMessage.trim() || isTyping}
+            className={`p-3 rounded-xl transition-all duration-200 flex items-center justify-center shadow-lg ${
+                isGameOver || !inputMessage.trim() || isTyping
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                : 'bg-[#052648] text-white hover:bg-[#0a4d8f] active:scale-95 hover:shadow-xl'
+            }`}>
             <Send className="w-5 h-5" />
           </button>
         </div>
+        
+        <p className="text-[10px] text-center text-slate-400 mt-2">
+            Les réponses du patient sont générées par IA. Vérifiez toujours la cohérence médicale.
+        </p>
       </div>
     </div>
   );
 };
+
 export default ChatWindow;
 
 
@@ -17022,8 +17229,8 @@ FICHIER: D:\5GI\STI\fulltang-sti\components\simulation\ExamPres.tsx
 // components/simulation/ExamPres.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { X, FileText, User, HeartPulse, Edit, Loader2, Trophy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, User, HeartPulse, Edit, TestTube2, AlertCircle } from 'lucide-react';
 import { Patient, ClinicalExam } from '@/types/simulation/types';
 import SignaturePad from '@/components/ui/Sign';
 import { Button } from '@/components/ui/Button';
@@ -17032,9 +17239,9 @@ import { Button } from '@/components/ui/Button';
 interface ExamPresProps {
   isOpen: boolean;
   onClose: () => void;
-  exam: ClinicalExam | null;
+  exam: ClinicalExam | null; // L'examen sélectionné est passé ici
   patient: Patient;
-  onPrescribe: (exam: ClinicalExam) => void;
+  onPrescribe: (name: string, reason: string) => void; // Fonction du parent pour appeler le backend
 }
 
 const ExamPrescriptionModal: React.FC<ExamPresProps> = ({
@@ -17045,146 +17252,121 @@ const ExamPrescriptionModal: React.FC<ExamPresProps> = ({
   onPrescribe,
 }) => {
   const [reason, setReason] = useState('');
-  const [isPrescribing, setIsPrescribing] = useState(false);
-  const [showResult, setShowResult] = useState(false);
 
-  // Gère la réinitialisation de l'état à la fermeture
-  const handleClose = () => {
-    setReason('');
-    setIsPrescribing(false);
-    setShowResult(false);
-    onClose();
-  };
-  
-  const handlePrescribeClick = () => {
-    if (!exam) return;
-    setIsPrescribing(true);
-
-    // Simulation d'un chargement de 10 secondes
-    setTimeout(() => {
-        setIsPrescribing(false);
-        setShowResult(true);
-    }, 10000);
-  };
-  
-  // Appelle la fonction parente et ferme le modal
-  const handleResultConfirmation = () => {
-    if (exam) {
-        onPrescribe(exam);
+  // Réinitialiser le formulaire quand la modale s'ouvre avec un nouvel examen
+  useEffect(() => {
+    if (isOpen) {
+        setReason('');
     }
-    handleClose();
-  }
+  }, [isOpen, exam]);
 
+  // Si pas ouvert ou pas d'examen sélectionné, on ne rend rien
   if (!isOpen || !exam) {
     return null;
   }
-  
-  // --- Sous-composants pour chaque état du modal ---
 
-  const renderFormContent = () => (
-      <>
-        {/* Résumé des informations du patient */}
-        <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2"><User size={16}/> Patient</h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
-                <p><strong>Nom:</strong> {patient.nom}</p>
-                <p><strong>Âge:</strong> {patient.age} ans</p>
-                <p className="col-span-2"><strong>Motif:</strong> {patient.motif}</p>
-            </div>
-        </div>
-        
-        {/* Détails de la prescription */}
-        <div className="space-y-4">
-            <div>
-                <label htmlFor="reason" className="font-bold text-slate-700 mb-1 flex items-center gap-2">
-                    <Edit size={16}/> Raison de l'examen
-                </label>
-                <textarea
-                    id="reason"
-                    rows={4}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="w-full p-2 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition"
-                    placeholder="Justifiez la nécessité de cet examen..."
-                />
-            </div>
-            <div>
-                 <label className="font-bold text-slate-700 mb-1 block">Signature Numérique</label>
-                 <SignaturePad />
-            </div>
-        </div>
-
-        {/* Actions du Modal */}
-        <div className="flex justify-end gap-3 mt-8 pt-4 border-t">
-          <Button variant="outline" onClick={handleClose}>Annuler</Button>
-          <Button onClick={handlePrescribeClick} disabled={!reason.trim()}>Prescrire</Button>
-        </div>
-      </>
-  );
-
-  const renderLoadingContent = () => (
-    <div className="flex flex-col items-center justify-center text-center p-8 h-80 animate-fade-in">
-      <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-      <h3 className="text-lg font-semibold text-primary">Analyse en cours...</h3>
-      <p className="text-sm text-slate-500">Le bulletin d'examen est envoyé au laboratoire. Veuillez patienter.</p>
-    </div>
-  );
-
-  const renderResultContent = () => (
-    <div className="p-4 animate-fade-in">
-        <h3 className="font-bold text-xl text-primary text-center mb-4 flex items-center justify-center gap-2">
-          <Trophy size={22} className="text-amber-500" />
-          Résultat de l'Examen
-        </h3>
-        <div className="bg-slate-100 p-6 rounded-lg text-center border-2 border-primary/20">
-            <p className="text-base font-semibold text-slate-700 mb-2">{exam.name}</p>
-            <p className="text-3xl font-bold text-primary">{exam.resultat}</p>
-        </div>
-        <div className="mt-6 flex justify-center">
-           <Button onClick={handleResultConfirmation}>Ajouter au dossier et continuer</Button>
-        </div>
-    </div>
-  );
+  const handlePrescribeClick = () => {
+    if (!reason.trim()) return;
+    
+    // On envoie le nom de l'examen (connu via props) et la raison
+    onPrescribe(exam.name, reason);
+    
+    // On ferme la modale (l'attente du résultat se fera via le Toast/Chat dans le parent)
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center overflow-y justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-        <div className="relative bg-slate-50 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all animate-fade-in-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="relative bg-slate-50 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            
             {/* En-tête du bulletin */}
-            <header className="p-6 border-b-2 border-dashed">
+            <header className="p-6 border-b border-slate-200 bg-white rounded-t-xl sticky top-0 z-10">
                 <div className="flex justify-between items-start">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
-                            <HeartPulse size={24} className="text-primary"/>
-                            <h2 className="text-xl font-bold text-primary">Hôpital "The Good Doctor"</h2>
+                            <HeartPulse size={24} className="text-[#052648]"/>
+                            <h2 className="text-xl font-bold text-[#052648]">Hôpital "The Good Doctor"</h2>
                         </div>
-                        <p className="text-sm text-slate-500 ml-8">Bulletin d'examen médical</p>
+                        <p className="text-sm text-slate-500 font-medium">Laboratoire Central d'Analyses Médicales</p>
                     </div>
-                     <button onClick={handleClose} disabled={isPrescribing} className="p-1 rounded-full hover:bg-slate-200 transition-colors disabled:opacity-50">
+                     <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 transition-colors">
                         <X className="w-5 h-5 text-slate-600"/>
                     </button>
                 </div>
             </header>
 
-             {/* Zone de contenu dynamique */}
-             <main className="p-6">
-                {!isPrescribing && !showResult && (
-                  <div className="flex items-center gap-3 mb-6">
-                       <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-                           <FileText size={24} />
-                       </div>
-                       <h2 id="modal-title" className="text-xl font-bold text-primary">
-                           Demande d'examen : {exam.name}
-                       </h2>
-                  </div>
-                )}
+             {/* Zone de contenu défilable */}
+             <main className="p-6 overflow-y-auto space-y-6">
                 
-                 {isPrescribing 
-                    ? renderLoadingContent()
-                    : showResult
-                    ? renderResultContent()
-                    : renderFormContent()
-                }
+                {/* 1. Résumé Patient */}
+                <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+                    <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm uppercase tracking-wide">
+                        <User size={16}/> Identification Patient
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm text-slate-700">
+                        <div>
+                            <span className="text-slate-500">Nom :</span> <span className="font-semibold">{patient.nom}</span>
+                        </div>
+                        <div>
+                            <span className="text-slate-500">Âge :</span> <span className="font-semibold">{patient.age} ans</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. L'examen sélectionné (Lecture seule) */}
+                <div>
+                    <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm uppercase tracking-wide">
+                        <TestTube2 size={16}/> Examen Demandé
+                    </h3>
+                    <div className="w-full p-3 bg-white border border-slate-300 rounded-md font-bold text-[#052648] shadow-sm flex items-center gap-3">
+                        {/* On affiche l'icône de l'examen s'il y en a une, sinon une par défaut */}
+                        {exam.icon ? <exam.icon className="w-5 h-5" /> : <TestTube2 className="w-5 h-5"/>}
+                        {exam.name}
+                    </div>
+                </div>
+                
+                {/* 3. Justification (Input) */}
+                <div>
+                    <label htmlFor="reason" className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm uppercase tracking-wide">
+                        <Edit size={16}/> Indication Clinique (Obligatoire)
+                    </label>
+                    <textarea
+                        id="reason"
+                        rows={4}
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        className="w-full p-3 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#052648]/20 focus:border-[#052648] outline-none transition-all text-sm resize-none shadow-inner"
+                        placeholder="Justifiez votre demande (ex: Recherche d'anémie, suspicion de foyer infectieux...)"
+                        autoFocus
+                    />
+                    <div className="mt-2 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-100">
+                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5"/>
+                        <p>Le résultat généré par l'IA dépendra de la pertinence de votre demande par rapport au cas clinique.</p>
+                    </div>
+                </div>
+
+                {/* 4. Signature */}
+                <div>
+                     <label className="font-bold text-slate-700 mb-2 block text-sm uppercase tracking-wide">Signature Praticien</label>
+                     <div className="border rounded-lg overflow-hidden border-slate-300">
+                        <SignaturePad />
+                     </div>
+                </div>
              </main>
+
+            {/* Footer Actions */}
+            <div className="p-6 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3 sticky bottom-0 z-10">
+                <Button variant="outline" onClick={onClose} className="text-slate-600">
+                    Annuler
+                </Button>
+                <Button 
+                    onClick={handlePrescribeClick} 
+                    disabled={!reason.trim()} 
+                    className="bg-[#052648] hover:bg-[#0a4d8f] text-white px-6 shadow-lg shadow-blue-900/10 disabled:opacity-50 disabled:shadow-none"
+                >
+                    Envoyer la demande
+                </Button>
+            </div>
         </div>
     </div>
   );
@@ -18462,7 +18644,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       if (isLogin) {
         toast.success('Connexion réussie ! Redirection...');
-        router.push('/dashboard');
+        router.push('/simulation');
         router.refresh();
       } else {
         // MODIFIÉ : On vérifie que `response.data.user` existe et on le passe à `onSuccess`
@@ -21370,6 +21552,7 @@ export interface Message {
   isAction?: boolean; // Pour différencier une question orale d'une action physique (auscultation)
     // Ajout pour le feedback immédiat du tuteur (rouge si mauvais)
   quality?: 'good' | 'bad' | 'neutral'; 
+  feedback?: string; // Texte justificatif
 }
 
 export interface DiagnosticTool {
@@ -21408,7 +21591,7 @@ FICHIER: D:\5GI\STI\fulltang-sti\types\simulation\grosmot.ts
 
 // types/simulation/gros-mots.ts
 
-export const PROFANITY_LIST = [
+export const PROFANITY_LIST2 = [
     "merde",
     "putain",
     "oh la vache",
@@ -21452,6 +21635,11 @@ export const PROFANITY_LIST = [
     "fils de pute",
     "trou du cul",
     "trou de balle"
+  ];
+
+export const PROFANITY_LIST = [
+    "merde",
+    "putain",
   ];
 
 
