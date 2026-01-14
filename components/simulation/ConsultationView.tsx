@@ -61,6 +61,21 @@ const ConsultationView: React.FC<ConsultationViewProps> = (props) => {
   const showChat = gameState === 'asking' || gameState === 'finished';
   const showDiagnosisInput = gameState === 'diagnosing';
 
+    // --- CORRECTION : Wrapper pour adapter la signature de la fonction ---
+  const handleExamPrescription = (name: string, reason: string) => {
+    // On doit reconstruire ou trouver l'objet ClinicalExam attendu par le parent.
+    // Si 'props.selectedExam' est déjà l'examen en cours, on peut l'utiliser.
+    if (props.selectedExam && props.selectedExam.name === name) {
+        props.onPrescribeExam(props.selectedExam);
+    } else {
+        // Fallback: on cherche dans la liste ou on crée un objet partiel (si le typage le permettait, mais ici on va chercher)
+        const exam = clinicalExams.find(e => e.name === name);
+        if (exam) {
+            props.onPrescribeExam(exam);
+        }
+    }
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-[#052648]">
        {/* Arrière-plan thématique subtil */}
@@ -235,7 +250,7 @@ const ConsultationView: React.FC<ConsultationViewProps> = (props) => {
           onClose={props.onCloseExamModal} 
           exam={props.selectedExam} 
           patient={patientData} 
-          onPrescribe={props.onPrescribeExam} 
+          onPrescribe={handleExamPrescription} 
       />
       
       {/* 2. Modal Prescription (Lance le Grading) */}
