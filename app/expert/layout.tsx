@@ -1,7 +1,7 @@
 // app/expert/layout.tsx
 'use client';
 import React, { useState, ReactNode } from 'react';
-import { LayoutDashboard, CheckCircle, PlusCircle, UserCircle, Bell, TrendingUp, HeartPulse, BookUser } from 'lucide-react';
+import { LayoutDashboard, CheckCircle, PlusCircle, UserCircle, Bell, TrendingUp, HeartPulse, BookUser, Check } from 'lucide-react';
 import Link from 'next/link';
 import { CaseProvider } from '@/contexts/CaseContext';
 import { Toaster } from 'react-hot-toast';
@@ -12,8 +12,9 @@ import ValidationListPage from '@/app/expert/validation/page';
 import CreateCase from '@/components/expert/Create';
 import Analytics from '@/components/expert/Analytics';
 import Library from '@/components/dashboard/Library';
+import SymptomLibrary from '@/components/expert/Symptom';
 
-type ExpertView = 'dashboard' | 'validation' | 'analytics' | 'create' | 'lib';
+type ExpertView = 'dashboard' | 'validation' | 'analytics' | 'create' | 'lib' | 'symptom';
 
 // --- SIDEBAR ---
 const Sidebar = ({ activeView, setActiveView }: { activeView: ExpertView, setActiveView: (view: ExpertView) => void }) => {
@@ -23,6 +24,7 @@ const Sidebar = ({ activeView, setActiveView }: { activeView: ExpertView, setAct
     { id: 'analytics', name: 'Analyse des Sessions', icon: TrendingUp },
     { id: 'create', name: 'Créer un Cas', icon: PlusCircle },
     { id: 'lib', name: 'Bibliothèque de cas', icon: BookUser },
+    { id: 'symptom', name: 'Symptômes', icon: Check },
   ];
   return (
     <aside className="w-64 flex-shrink-0 bg-[#052648] text-white flex flex-col">
@@ -104,6 +106,8 @@ export default function ExpertLayout({ children }: { children: ReactNode }) {
         return <CreateCase />;
       case 'lib':
         return <Library />;
+      case 'symptom':
+        return <SymptomLibrary />;
       default:
         return <ExpertDashboardPage />;
     }

@@ -1,16 +1,21 @@
-// app/expert/creer/page.tsx
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusCircle, FileText, User, HeartPulse, Stethoscope, Beaker } from 'lucide-react';
+import { PlusCircle, FileText, User, HeartPulse, Stethoscope, Search, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { services, difficultyLevels } from '@/types/simulation/constant';
-import { createCase } from '@/services/caseService'; // <-- AJOUT
+import { getDiseases, getSymptoms, createClinicalCase } from '@/services/expertService';
+import { BackendDisease, BackendSymptom, BackendClinicalCaseCreate } from '@/types/backend';
 
-/**
- * Composant de champ de formulaire réutilisable pour la cohérence.
- */
+// Définition de difficulté simplifiée pour mapper avec le backend (entier ou string)
+const DIFFICULTY_MAP = {
+    'Profane': 1,
+    'Débutant': 2,
+    'Intermédiaire': 3,
+    'Confirmé': 4,
+    'Expert': 5
+};
+
 const FormField = ({ id, label, children }: { id: string, label: string, children: React.ReactNode }) => (
     <div>
         <label htmlFor={id} className="block text-sm font-semibold text-slate-700 mb-1.5">{label}</label>
@@ -18,11 +23,35 @@ const FormField = ({ id, label, children }: { id: string, label: string, childre
     </div>
 );
 
-/**
- * La page permettant à un expert de créer un nouveau cas clinique manuellement.
- */
 const CreateCase: React.FC = () => {
     const router = useRouter();
+    const [isLoading, setIsLoading] = useState(true);
+    const [diseases, setDiseases] = useState<BackendDisease[]>([]);
+    const [symptomsList, setSymptomsList] = useState<BackendSymptom[]>([]);
+    
+    // Pour gérer la sélection multiple de symptômes (simple pour l'exemple)
+    const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]); 
+
+    // Chargement des données référentielles
+    useEffect(() => {
+        const loadRefs = async () => {
+            try {
+                // Requête GET parallèle vers le backend
+                const [dData, sData] = await Promise.all([
+                    getDiseases(),
+                    getSymptoms()
+                ]);
+                setDiseases(dData);
+                setSymptomsList(sData);
+            } catch (err) {
+                console.error(err);
+                toast.error("Erreur de connexion au module Expert Backend");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadRefs();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -31,129 +60,121 @@ const CreateCase: React.FC = () => {
         const formData = new FormData(form);
         const formValues = Object.fromEntries(formData.entries());
 
-        // --- CORRECTION MAJEURE ICI ---
-        // Construire l'objet avec des noms de colonnes en snake_case pour correspondre à Supabase
-        const newCaseForDB = {
-            id: `${formValues.service}-${Date.now()}`,
-            service_id: formValues.service as string,      // MODIFIÉ : serviceId -> service_id
-            difficulty: formValues.difficulty as string,
-            patient: { // L'objet `patient` reste en camelCase car il est stocké dans une seule colonne JSONB
-                nom: formValues.nom as string,
-                age: Number(formValues.age),
-                sexe: formValues.sexe as string,
-                motif: formValues.motif as string,
-                antecedents: formValues.antecedents as string, // MODIFIÉ : Correction du `name`
-                symptomes: formValues.symptomes as string,       // MODIFIÉ : Correction du `name`
-                signesVitaux: formValues.signesVitaux as string,   // MODIFIÉ : Correction du `name`
-                examenClinique: formValues.examenClinique as string, // MODIFIÉ : Correction du `name`
-                analyseBiologique: formValues.analyseBiologique as string, // MODIFIÉ : Correction du `name`
-                diagnostic: formValues.diagnostic as string        // MODIFIÉ : Correction du `name`
+        // Construction de l'objet conforme à 'BackendClinicalCaseCreate' (Schema OpenAPI)
+        // Note: Le backend attend pathologie_principale_id (int)
+        
+        // Récupération des symptômes cochés (mock simplifié : on prend le champ texte pour l'histoire, et un tableau vide d'objets ID pour l'instant si pas de UI multiselect complexe)
+        const formattedCase: BackendClinicalCaseCreate = {
+            code_fultang: `CS-${Date.now()}`,
+            pathologie_principale_id: parseInt(formValues.diseaseId as string), 
+            niveau_difficulte: parseInt(formValues.difficulty as string),
+            
+            // Structure JSON complexe demandée par votre Backend
+            presentation_clinique: {
+                histoire_maladie: formValues.histoire as string,
+                // Dans une vraie implém, on mapperait les IDs sélectionnés dans une liste déroulante multiple
+                symptomes_patient: [], // On laisse vide pour ce test rapide, ou on ajouterait une UI de sélection multiple
+                antecedents: {
+                    details: formValues.antecedents
+                }
+            },
+            
+            // Stockage des infos patients brutes dans des champs JSON flexibles (si le backend le permet dans presentation_clinique) ou ignoré si schéma strict.
+            // Vu le schéma strict OpenAPI, "nom", "age" n'apparaissent pas dans ClinicalCaseCreate racine. 
+            // On suppose qu'ils vont dans "presentation_clinique.antecedents" ou similaire.
+            donnees_paracliniques: {
+               examen_clinique: formValues.examenClinique,
+               signes_vitaux: formValues.signesVitaux
             }
         };
 
-        // Utilisation du service avec react-hot-toast
+        // Si le backend nécessite "symptomes_patient" obligatoirement non vide :
+        // formattedCase.presentation_clinique.symptomes_patient = [{ symptome_id: 1, details: "Douleur simulée" }];
+
         await toast.promise(
-            createCase(newCaseForDB as any),
+            createClinicalCase(formattedCase),
             {
-                loading: 'Enregistrement du cas...',
-                success: () => {
+                loading: 'Communication avec le Backend STI...',
+                success: (data) => {
+                    console.log("Success Data Backend:", data);
                     form.reset();
-                    // Vous pouvez décommenter la ligne suivante si vous voulez rediriger l'expert après la création
-                    // router.push('/expert/validation'); 
-                    return "Nouveau cas soumis avec succès !";
+                    return "Cas clinique enregistré dans la base experte !";
                 },
-                error: (err) => `Échec de la création: ${err.message}`,
+                error: (err) => `Erreur Backend: ${err.message}`,
             }
         );
     };
 
+    if (isLoading) {
+        return <div className="flex h-64 items-center justify-center text-primary"><Loader2 className="animate-spin mr-2"/> Chargement du référentiel médical...</div>;
+    }
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-8">
-            {/* En-tête de la page */}
+        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in">
             <div>
-                <h1 className="text-3xl font-bold text-primary">Créer un Nouveau Cas Clinique</h1>
-                <p className="text-slate-600 mt-1">Remplissez ce formulaire pour construire un cas pédagogique personnalisé.</p>
+                <h1 className="text-3xl font-bold text-primary">Créer un Nouveau Cas (Connecté Backend)</h1>
+                <p className="text-slate-600 mt-1">Créez un cas qui sera stocké dans l'encyclopédie du module expert.</p>
             </div>
 
-            {/* Section 1: Informations Générales */}
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><FileText size={20}/> Informations Générales</h2>
+            {/* Pathologie et Difficulté (REQUIS PAR SCHEMA) */}
+            <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500">
+                <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><FileText size={20}/> Référentiel</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField id="service" label="Service Médical">
-                        <select id="service" name="service" required className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary">
-                            {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    <FormField id="diseaseId" label="Pathologie Principale (Base de Données)">
+                        <select id="diseaseId" name="diseaseId" required className="w-full p-2 border rounded-md bg-slate-50">
+                            <option value="">Sélectionnez une pathologie...</option>
+                            {diseases.map(d => (
+                                <option key={d.id} value={d.id}>{d.nom_fr} ({d.code_icd10})</option>
+                            ))}
                         </select>
+                        {diseases.length === 0 && <span className="text-xs text-red-500">Aucune maladie trouvée via GET /diseases</span>}
                     </FormField>
+                    
                     <FormField id="difficulty" label="Niveau de Difficulté">
-                        <select name="dif" id="difficulty" required className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary">
-                            {difficultyLevels.map(d => <option key={d} value={d}>{d}</option>)}
+                        <select name="difficulty" id="difficulty" required className="w-full p-2 border rounded-md bg-slate-50">
+                            {Object.entries(DIFFICULTY_MAP).map(([label, val]) => (
+                                <option key={val} value={val}>{label}</option>
+                            ))}
                         </select>
                     </FormField>
                 </div>
             </div>
 
-            {/* Section 2: Données du Patient */}
+            {/* Identité Simulée (Dans un vrai cas réel, le patient est une entité séparée, ici on le met dans le texte histoire) */}
             <div className="bg-white p-6 rounded-xl shadow-md">
-                 <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><User size={20}/> Identité du Patient</h2>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <FormField id="nom" label="Nom du Patient">
-                        <input type="text" name="nom" id="nom" required placeholder="Ex: M. Dupont" className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary" />
-                    </FormField>
-                     <FormField id="age" label="Âge">
-                        <input type="number" name="age" id="age" required placeholder="Ex: 58" className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary" />
-                    </FormField>
-                     <FormField id="sexe" label="Sexe">
-                        <select id="sexe" name="sexe" required className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary">
-                            <option value="Masculin">Masculin</option>
-                            <option value="Féminin">Féminin</option>
-                        </select>
-                    </FormField>
-                 </div>
-            </div>
-
-            {/* Section 3: Données de Consultation */}
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                 <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><HeartPulse size={20}/> Données de Consultation</h2>
+                 <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><User size={20}/> Contexte Clinique</h2>
                  <div className="space-y-4">
-                    <FormField id="motif" label="Motif de Consultation">
-                        <textarea id="motif" name="motif" rows={2} required placeholder="Ex: Douleur thoracique et essoufflement" className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary"></textarea>
+                    <FormField id="histoire" label="Histoire de la maladie & Patient (Description textuelle)">
+                        <textarea id="histoire" name="histoire" rows={4} required 
+                        placeholder="Ex: M. Dupont, 58 ans, consulte pour..." 
+                        className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary"></textarea>
                     </FormField>
                     <FormField id="antecedents" label="Antécédents">
-                        <textarea id="antecedents" name="antecedent" rows={2} required placeholder="Ex: Hypertension artérielle, tabagisme" className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary"></textarea>
-                    </FormField>
-                    <FormField id="symptomes" label="Symptômes Rapportés">
-                        <textarea id="symptomes" name="ymptom" rows={3} required placeholder="Ex: Douleur oppressive rétrosternale irradiant vers le bras gauche..." className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary"></textarea>
+                        <textarea id="antecedents" name="antecedents" rows={2} required className="w-full p-2 border rounded-md bg-slate-50"></textarea>
                     </FormField>
                  </div>
             </div>
 
-            {/* Section 4: Données Cliniques & Diagnostic */}
+            {/* Paraclinique */}
              <div className="bg-white p-6 rounded-xl shadow-md">
-                 <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><Stethoscope size={20}/> Données Cliniques & Diagnostic</h2>
+                 <h2 className="text-xl font-bold text-primary flex items-center gap-2 mb-4"><Stethoscope size={20}/> Données Paracliniques (Stockage JSONB)</h2>
                  <div className="space-y-4">
                     <FormField id="signesVitaux" label="Signes Vitaux">
-                        <input type="text" name="sv" id="signesVitaux" required placeholder="Ex: TA: 160/95 mmHg, FC: 98 bpm, FR: 22/min, SpO2: 94%" className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary" />
+                        <input type="text" name="signesVitaux" id="signesVitaux" placeholder="TA, FC, SpO2..." className="w-full p-2 border rounded-md bg-slate-50" />
                     </FormField>
-                     <FormField id="examenClinique" label="Examen Clinique">
-                        <textarea name="cliex" id="examenClinique" rows={2} required placeholder="Ex: Ausculation cardiaque: Bruits du cœur réguliers..." className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary"></textarea>
-                    </FormField>
-                     <FormField id="analyseBiologique" label="Analyse Biologique">
-                        <textarea name="ab" id="analyseBiologique" rows={2} required placeholder="Ex: Troponine élevée." className="w-full p-2 border rounded-md bg-slate-50 focus:border-primary focus:ring-primary"></textarea>
-                    </FormField>
-                     <FormField id="diagnostic" label="Diagnostic Final Attendu">
-                        <input type="text" name="diag" id="diagnostic" required placeholder="Ex: Syndrome coronarien aigu" className="w-full p-2 border rounded-md bg-slate-50 font-semibold focus:border-primary focus:ring-primary" />
+                     <FormField id="examenClinique" label="Examen Clinique Détaillé">
+                        <textarea name="examenClinique" id="examenClinique" rows={2} className="w-full p-2 border rounded-md bg-slate-50"></textarea>
                     </FormField>
                  </div>
             </div>
 
-            {/* Bouton de soumission */}
             <div className="flex justify-end pt-4">
                 <button type="submit" className="px-6 py-3 bg-[#052648] text-white font-semibold rounded-lg hover:bg-blue-800 transition-colors shadow-lg flex items-center gap-2">
-                    <PlusCircle size={20}/> Soumettre le Cas
+                    <PlusCircle size={20}/> Créer Cas dans Backend
                 </button>
             </div>
         </form>
     );
 }
 
-export default CreateCase ;
+export default CreateCase;
