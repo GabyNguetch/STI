@@ -8,14 +8,15 @@ import { UserProfile } from '@/types/user/profile';
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeButton, setActiveButton] = useState<'connexion' | 'commencer' | null>(null);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   
   // Simuler un utilisateur connecté (à remplacer par votre logique d'authentification)
   const [isLoggedIn, setIsLoggedIn] = useState(false); // false = non connecté par défaut
   
   // Profil de l'apprenant (simulé - à remplacer par les données réelles)
+  // CORRECTION : Ajout de 'username' qui est obligatoire dans l'interface UserProfile
   const userProfile: UserProfile = {
     name: 'Dr. Elsa',
+    username: 'DrElsa', // <--- Ajouté ici pour corriger l'erreur de build
     email: 'elsamiss@email.com',
     level: 'student',
     yearOfStudy: 3,
