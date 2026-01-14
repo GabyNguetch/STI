@@ -11,6 +11,7 @@ export default function Profile() {
   // Données de profil simulées
   const [profile, setProfile] = useState<UserProfile>({
     name: 'Dr. elsamiss',
+    username: 'elsamiss', // <--- CORRECTION : Ajout du champ username obligatoire
     email: 'elsamiss@email.com',
     avatar: '',
     level: 'student',
@@ -117,6 +118,8 @@ export default function Profile() {
                   <User className="text-white" size={40} />
                 </div>
                 <h2 className="text-xl font-bold text-[#052648] mb-1">{profile.name}</h2>
+                {/* Affichage du username en petit */}
+                <p className="text-xs text-gray-500 mb-1">@{profile.username}</p>
                 <p className="text-sm text-gray-600 mb-4">{getLevelLabel(profile.level)}</p>
                 
                 <div className="space-y-3 text-left">
@@ -204,7 +207,21 @@ export default function Profile() {
                             <p className="text-gray-900">{profile.name}</p>
                           )}
                         </div>
+                        {/* Ajout du champ Username en édition/lecture */}
                         <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Nom d'utilisateur</label>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={profile.username}
+                              onChange={(e) => updateProfile('username', e.target.value)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#052648] focus:border-transparent outline-none"
+                            />
+                          ) : (
+                            <p className="text-gray-900">{profile.username}</p>
+                          )}
+                        </div>
+                        <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                           {isEditing ? (
                             <input
