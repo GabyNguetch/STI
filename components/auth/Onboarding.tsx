@@ -7,9 +7,8 @@ import toast from 'react-hot-toast'; // AJOUT
 
 import { 
   ArrowRight, ArrowLeft, CheckCircle, GraduationCap, Target, Heart, Award, Zap, 
-  User, BookOpen, BarChart3, HeartPulse, Building, FileText, Calendar, Activity, 
-  ListChecks, BrainCircuit, Hourglass, Sparkles, Stethoscope, Microscope, 
-  Brain, Users, Trophy, Clock, TrendingUp
+  User, BookOpen, BarChart3, HeartPulse, Stethoscope, Microscope, 
+  ListChecks, Hourglass, Sparkles, Trophy, Calendar
 } from 'lucide-react';
 // Importation des composants UI
 import { Button } from '@/components/ui/Button';
@@ -20,7 +19,7 @@ import { Label } from '@/components/ui/Label';
 
 // AJOUT : Importation du service pour mettre à jour le profil
 import { updateProfile as updateProfileService } from '@/services/authService';
-import { UserProfile } from '@/types/user/profile';
+import { UserProfile, UserLevel, PracticeFrequency, DifficultyLevel } from '@/types/user/profile';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Mock des types (peut être remplacé par des imports depuis un fichier de types centralisé)
@@ -28,7 +27,7 @@ const SPECIALTIES = ['Cardiologie', 'Neurologie', 'Pédiatrie', 'Chirurgie', 'De
 const LEARNING_GOALS = ['Préparer les examens', 'Améliorer le diagnostic', 'Approfondir les connaissances', 'Formation continue'];
 const CASE_TYPES = ["Cas d'urgence", 'Cas complexes', 'Cas pédagogiques', 'Cas rares'];
 
-// Sous-composant pour le guide (inchangé)
+// Sous-composant pour le guide
 const stepGuides = [
   {
     icon: User,
@@ -56,7 +55,8 @@ const stepGuides = [
   },
 ];
 
-const OnboardingGuide = ({ step }) => {
+// CORRECTION : Typage explicite de la prop 'step'
+const OnboardingGuide = ({ step }: { step: number }) => {
   const guide = stepGuides[step - 1];
   const Icon = guide.icon;
 
@@ -199,7 +199,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
                     const Icon = level.icon;
                     const isSelected = profile.level === level.value;
                     return (
-                      <button key={level.value} onClick={() => updateProfile('level', level.value)} className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${isSelected ? 'bg-gradient-to-br from-[#052648] to-blue-900 text-white border-transparent shadow-lg scale-105' : 'bg-white border-slate-200 text-slate-700 hover:border-[#052648] hover:shadow-md'}`}>
+                      <button key={level.value} onClick={() => updateProfile('level', level.value as UserLevel)} className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${isSelected ? 'bg-gradient-to-br from-[#052648] to-blue-900 text-white border-transparent shadow-lg scale-105' : 'bg-white border-slate-200 text-slate-700 hover:border-[#052648] hover:shadow-md'}`}>
                         <Icon size={24} />
                         <span className="text-sm font-medium">{level.label}</span>
                       </button>
@@ -226,7 +226,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
               <Label>Domaines d'intérêt</Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-2">
                 {SPECIALTIES.map((specialty) => {
-                  const isSelected = profile.areasOfInterest.includes(specialty);
+                  const isSelected = profile.areasOfInterest?.includes(specialty);
                   return (
                     <button
                       key={specialty}
@@ -253,7 +253,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
               <Label>Objectifs d'apprentissage</Label>
               <div className="space-y-3">
                 {LEARNING_GOALS.map((goal) => {
-                  const isSelected = profile.learningGoals.includes(goal);
+                  const isSelected = profile.learningGoals?.includes(goal);
                   return (
                     <button
                       key={goal}
@@ -284,7 +284,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
                   return (
                     <button
                       key={freq.value}
-                      onClick={() => updateProfile('practiceFrequency', freq.value)}
+                      onClick={() => updateProfile('practiceFrequency', freq.value as PracticeFrequency)}
                       className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${
                         isSelected 
                           ? 'bg-gradient-to-br from-[#052648] to-blue-900 text-white border-transparent shadow-lg scale-105' 
@@ -315,7 +315,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
                   return (
                     <button
                       key={level.value}
-                      onClick={() => updateProfile('difficultyPreference', level.value)}
+                      onClick={() => updateProfile('difficultyPreference', level.value as DifficultyLevel)}
                       className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${
                         isSelected 
                           ? 'bg-gradient-to-br from-[#052648] to-blue-900 text-white border-transparent shadow-lg scale-105' 
@@ -333,7 +333,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
               <Label>Types de cas préférés</Label>
               <div className="space-y-3">
                 {CASE_TYPES.map((caseType) => {
-                  const isSelected = profile.preferredCaseTypes.includes(caseType);
+                  const isSelected = profile.preferredCaseTypes?.includes(caseType);
                   return (
                     <button
                       key={caseType}
@@ -385,7 +385,7 @@ export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
               <Button variant="outline" onClick={handleBack} disabled={currentStep === 1 || isLoading} className="flex-1">
                 <ArrowLeft size={18} className="mr-2"/> Précédent
               </Button>
-              {/* MODIFIÉ : Le bouton gère l'état de chargement */}
+              {/* Le bouton gère l'état de chargement */}
               <Button onClick={handleNext} disabled={isLoading} className="flex-1">
                 {isLoading ? 'Enregistrement...' : currentStep === totalSteps ? (
                   <>Terminer <Trophy size={18} className="ml-2"/></>
