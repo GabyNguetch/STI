@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 // Configuration
 // Assure-toi que ton backend FastAPI tourne sur ce port
-const RAG_SERVICE_URL = "http://127.0.0.1:8000/api/v1"; 
+const RAG_SERVICE_URL = "https://backend-sti.onrender.com/api/v1"; 
 
 export async function POST(req: Request) {
   try {

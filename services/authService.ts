@@ -1,14 +1,12 @@
 // services/authService.ts
 
 import { createClient } from '@/lib/supabaseClient';
-import type { AuthError, AuthResponse, SignUpWithPasswordCredentials } from '@supabase/supabase-js';
-import type { UserProfile } from '@/types/user/profile'; 
+import type { AuthError, AuthResponse } from '@supabase/supabase-js';
+import type { UserProfile } from '@/types/user/profile';
 
 const supabase = createClient();
 
-// --- CORRECTION DU TYPAGE ICI ---
-// Au lieu d'étendre 'SignUpWithPasswordCredentials' (qui peut être un type Union ambigu pour TS),
-// nous définissons explicitement les champs attendus pour une inscription par Email.
+// 1. Interface stricte pour l'Inscription (Email)
 export interface SignUpCredentials {
   email: string;
   password: string;
@@ -21,7 +19,13 @@ export interface SignUpCredentials {
   }
 }
 
-// Fonction d'inscription (Sign Up) MISE À JOUR
+// 2. Interface stricte pour la Connexion (Email uniquement pour notre app)
+export interface SignInCredentials {
+  email: string;
+  password: string;
+}
+
+// --- Fonction d'Inscription ---
 export const signUp = async (credentials: SignUpCredentials): Promise<AuthResponse> => {
   const { email, password, options } = credentials;
 
@@ -29,7 +33,6 @@ export const signUp = async (credentials: SignUpCredentials): Promise<AuthRespon
     throw new Error('Email et mot de passe sont requis.');
   }
 
-  // Supabase accepte structurellement ces données
   const response = await supabase.auth.signUp({
     email,
     password,
@@ -38,33 +41,33 @@ export const signUp = async (credentials: SignUpCredentials): Promise<AuthRespon
   return response;
 };
 
-// Fonction de connexion (Sign In)
-export const signIn = async (credentials: SignUpWithPasswordCredentials): Promise<AuthResponse> => {
-    // Dans le cas du SignIn, on garde le type Supabase générique car on passe l'objet directement
+// --- Fonction de Connexion (CORRIGÉE) ---
+export const signIn = async (credentials: SignInCredentials): Promise<AuthResponse> => {
+    // TypeScript sait maintenant que 'email' existe obligatoirement dans SignInCredentials
     const { email, password } = credentials;
 
-    // Petite sécurité type pour s'assurer qu'on a bien l'email si c'est ce mode choisi
-    if ('email' in credentials && (!email || !password)) {
+    if (!email || !password) {
         throw new Error('Email et mot de passe sont requis.');
     }
 
+    // On passe l'objet à Supabase (qui est compatible avec la structure {email, password})
     const response = await supabase.auth.signInWithPassword(credentials);
     return response;
 };
 
-// Fonction de déconnexion (Sign Out)
+// --- Fonction de Déconnexion ---
 export const signOut = async (): Promise<{ error: AuthError | null }> => {
     const response = await supabase.auth.signOut();
     return response;
 };
 
-// Fonction pour récupérer l'utilisateur actuel
+// --- Fonction Utilitaires ---
 export const getCurrentUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.user ?? null;
 };
 
-// Mettre à jour le profil utilisateur
+// --- Mise à jour du Profil ---
 export const updateProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   if (!userId) throw new Error("L'ID de l'utilisateur est manquant.");
 
