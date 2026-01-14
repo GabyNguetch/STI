@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 // Importation des composants UI
 import { Button } from '@/components/ui/Button';
-import type { User } from '@supabase/supabase-js'; // <-- Importer le type User
+import type { User as SuperBaseUser } from '@supabase/supabase-js'; // <-- Importer le type User
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -90,9 +90,15 @@ const OnboardingGuide = ({ step }) => {
   );
 };
 
-export default function Onboarding() {
+interface OnboardingProps {
+user?: SuperBaseUser | null;
+}
+
+export default function Onboarding({ user: propUser }: OnboardingProps = {}) {
   const router = useRouter(); // AJOUT
-  const { user } = useAuth();
+  const { user: contextUser } = useAuth();
+// Utilise l'utilisateur passé en prop (inscription) OU celui du contexte (déjà connecté)
+  const user = propUser || contextUser;
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false); // AJOUT
   const totalSteps = 4;
