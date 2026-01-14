@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Award, Bell, ChevronDown, LogOut, Search, User } from 'lucide-react';
+import { Award, Bell, ChevronDown, LogOut, Search, Settings, User } from 'lucide-react';
 // MODIFIÉ : On importe le type de profil complet et le type pour le niveau
 import type { UserProfile, UserLevel } from '@/types/user/profile'; 
 import { useAuth } from '@/contexts/AuthContext'; // MODIFIÉ : on importe useAuth pour la déconnexion
