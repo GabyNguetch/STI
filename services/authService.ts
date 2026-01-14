@@ -2,17 +2,22 @@
 
 import { createClient } from '@/lib/supabaseClient';
 import type { AuthError, AuthResponse, SignUpWithPasswordCredentials } from '@supabase/supabase-js';
-import type { UserProfile } from '@/types/user/profile'; // Assurez-vous d'importer votre type
+import type { UserProfile } from '@/types/user/profile'; 
 
 const supabase = createClient();
 
-// Type étendu pour l'inscription incluant le nom
-interface SignUpCredentials extends SignUpWithPasswordCredentials {
+// --- CORRECTION DU TYPAGE ICI ---
+// Au lieu d'étendre 'SignUpWithPasswordCredentials' (qui peut être un type Union ambigu pour TS),
+// nous définissons explicitement les champs attendus pour une inscription par Email.
+export interface SignUpCredentials {
+  email: string;
+  password: string;
   options?: {
     data: {
       username?: string;
       [key: string]: any;
     }
+    emailRedirectTo?: string;
   }
 }
 
@@ -24,7 +29,7 @@ export const signUp = async (credentials: SignUpCredentials): Promise<AuthRespon
     throw new Error('Email et mot de passe sont requis.');
   }
 
-  // L'objet options.data sera stocké dans raw_user_meta_data et utilisé par notre trigger SQL
+  // Supabase accepte structurellement ces données
   const response = await supabase.auth.signUp({
     email,
     password,
@@ -33,43 +38,39 @@ export const signUp = async (credentials: SignUpCredentials): Promise<AuthRespon
   return response;
 };
 
-// Fonction de connexion (Sign In) - Inchangée
+// Fonction de connexion (Sign In)
 export const signIn = async (credentials: SignUpWithPasswordCredentials): Promise<AuthResponse> => {
-    // ... (code inchangé)
+    // Dans le cas du SignIn, on garde le type Supabase générique car on passe l'objet directement
     const { email, password } = credentials;
 
-    if (!email || !password) {
+    // Petite sécurité type pour s'assurer qu'on a bien l'email si c'est ce mode choisi
+    if ('email' in credentials && (!email || !password)) {
         throw new Error('Email et mot de passe sont requis.');
     }
 
-    const response = await supabase.auth.signInWithPassword({
-        email,
-        password,
-    });
+    const response = await supabase.auth.signInWithPassword(credentials);
     return response;
 };
 
-// Fonction de déconnexion (Sign Out) - Inchangée
+// Fonction de déconnexion (Sign Out)
 export const signOut = async (): Promise<{ error: AuthError | null }> => {
-    // ... (code inchangé)
     const response = await supabase.auth.signOut();
     return response;
 };
 
-// Fonction pour récupérer l'utilisateur actuel - Inchangée
+// Fonction pour récupérer l'utilisateur actuel
 export const getCurrentUser = async () => {
-    // ... (code inchangé)
     const { data: { session } } = await supabase.auth.getSession();
     return session?.user ?? null;
 };
 
-// NOUVELLE FONCTION : Mettre à jour le profil utilisateur
+// Mettre à jour le profil utilisateur
 export const updateProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   if (!userId) throw new Error("L'ID de l'utilisateur est manquant.");
 
   const updateData = {
     ...profileData,
-    id: userId, // Utiliser l'ID fourni
+    id: userId,
     updated_at: new Date().toISOString(),
   };
 
