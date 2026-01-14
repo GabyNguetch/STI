@@ -155,6 +155,7 @@ const ConsultationView: React.FC<ConsultationViewProps> = (props) => {
                     messageCount={messageCount} isGameOver={props.isGameOver} onReset={props.onReset}
                     onShowPatientInfo={() => {}} // Optionnel : ouvrirait panel infos
                     isTyping={props.isTyping}
+                    MAX_QUESTIONS={MAX_QUESTIONS}
                   />
                   {/* Note: Le bouton Indice flottant peut être ajouté ici si l'on ne veut pas celui du Header, 
                       mais pour une UX "Sérieuse/Pro", le Header est souvent préférable. */}
