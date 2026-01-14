@@ -1,13 +1,18 @@
+// components/dashboard/Sidebar.tsx
+'use client';
+
 import React, { useState } from 'react';
 import { LayoutDashboard, Milestone, Calendar, Settings, LogOut, Activity, Stethoscope, ChevronRight, HeartPulse, BookPlus } from 'lucide-react';
-import { useRouter } from 'next/navigation'; // <-- Importez useRouter pour la redirection
-import toast from 'react-hot-toast'; // <-- Pour le feedback utilisateur
-import { useAuth } from '@/contexts/AuthContext'; // <-- Importez notre hook 
+import { useRouter } from 'next/navigation'; 
+import toast from 'react-hot-toast'; 
+import { useAuth } from '@/contexts/AuthContext'; 
 import type { NavItem } from '@/types/dashboard/dashboard';
 
 const PRIMARY_COLOR = '#052648';
 
-const navItems = [
+// CORRECTION : On type explicitement ce tableau avec 'NavItem[]' 
+// pour que 'id' soit reconnu comme 'overview' | 'journey' ... et non pas string.
+const navItems: NavItem[] = [
   { id: 'overview', label: "Vue d'ensemble", icon: LayoutDashboard },
   { id: 'journey', label: 'Parcours', icon: Milestone },
   { id: 'lib', label: 'Bibliothèque', icon: BookPlus },
@@ -23,7 +28,7 @@ interface SidebarProps {
 // --- Composant Principal ---
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const router = useRouter();
-  // MODIFIÉ : Récupération des données de l'utilisateur et de la fonction signOut
+  
   const { profile, signOut: handleSignOut } = useAuth();
     const onLogoutClick = async () => {
     toast.loading('Déconnexion en cours...');
@@ -120,7 +125,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
         </nav>
 
         {/* Section Déconnexion */}
-        <button className="
+        <button 
+          onClick={onLogoutClick} // AJOUT du handler ici
+          className="
           w-full flex items-center gap-4 px-4 py-3.5 rounded-xl
           text-blue-200 hover:bg-red-500/20 hover:text-white
           transition-all duration-300 group border border-transparent hover:border-red-500/30
