@@ -1,181 +1,156 @@
 // services/ChatService.ts
-// Updated to use Next.js API proxy instead of direct backend calls
+import { apiClient } from '@/lib/apiClient';
 
-const API_PROXY = "/api/chat";
+// ================= TYPES POUR LE CHAT =================
 
-interface MessageHistory {
-    sender: string;
-    text: string;
-    time: string;
+export interface ChatMessageRequest {
+    sender: 'learner' | 'patient' | 'system' | 'tutor';
+    content: string;
+    message_metadata?: {
+        [key: string]: any;
+    };
 }
 
-export const sendMessageToRAG = async (caseId: number, message: string): Promise<string> => {
-    console.log('🔵 [RAG CHAT REQUEST via Proxy]');
-    console.log('Case ID:', caseId);
-    console.log('Message:', message);
+export interface ChatMessageResponse {
+    id: number;
+    session_id: string;
+    sender: 'learner' | 'patient' | 'system' | 'tutor';
+    content: string;
+    timestamp: string;
+    message_metadata?: {
+        [key: string]: any;
+    };
+}
 
-    try {
-        const response = await fetch(API_PROXY, {
+export interface ChatHistory {
+    messages: ChatMessageResponse[];
+    total: number;
+}
+
+// ================= ENDPOINTS CHAT =================
+
+/**
+ * 🔥 ENDPOINT PRINCIPAL: Envoie un message et récupère la réponse du Patient (IA)
+ * ATTENTION: Cet endpoint est SYNCHRONE et BLOQUANT
+ * Il peut prendre quelques secondes car il déclenche l'IA Patient
+ */
+export const sendChatMessage = async (
+    sessionId: string,
+    content: string,
+    sender: 'learner' | 'patient' | 'system' | 'tutor' = 'learner',
+    metadata?: { [key: string]: any }
+): Promise<ChatMessageResponse> => {
+    
+    console.log('💬 [CHAT] Sending message:', { sessionId, sender, content });
+
+    const payload: ChatMessageRequest = {
+        sender,
+        content,
+        message_metadata: metadata
+    };
+
+    const response = await apiClient<ChatMessageResponse>(
+        `/chat/sessions/${sessionId}/messages`,
+        {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mode: 'chat',
-                caseId: caseId,
-                userMessage: message
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP ${response.status}`);
+            body: JSON.stringify(payload)
         }
+    );
 
-        const data = await response.json();
-        console.log('✅ RAG Response:', data);
-        
-        return data.response || data.content || "Pas de réponse du patient.";
-    } catch (error: any) {
-        console.error('🔥 [RAG ERROR]', error);
-        throw new Error(`Erreur communication RAG: ${error.message}`);
-    }
+    console.log('✅ [CHAT] Response received:', response);
+
+    return response;
 };
 
-export const analyzeQuestionQuality = async (
-    caseId: number,
-    userMessage: string,
-    history: MessageHistory[]
-): Promise<{ status: 'good' | 'warning' | 'bad'; justification: string }> => {
-    console.log('🎓 [ANALYZE QUESTION via Proxy]');
+/**
+ * Récupère l'historique complet des messages d'une session
+ */
+export const getChatHistory = async (
+    sessionId: string,
+    limit?: number,
+    offset?: number
+): Promise<ChatHistory> => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    if (offset) params.append('offset', offset.toString());
 
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+
+    return await apiClient<ChatHistory>(
+        `/chat/sessions/${sessionId}/messages${queryString}`
+    );
+};
+
+/**
+ * 🤖 FONCTION WRAPPER pour envoyer un message étudiant et attendre la réponse du Patient
+ * Cette fonction simplifie l'appel pour le composant
+ */
+export const askPatient = async (
+    sessionId: string,
+    question: string
+): Promise<{ 
+    userMessage: ChatMessageResponse; 
+    patientResponse: ChatMessageResponse | null;
+}> => {
+    console.group('🗣️ [CHAT FLOW] Ask Patient');
+    
     try {
-        const response = await fetch(API_PROXY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mode: 'analyze',
-                caseId: caseId,
-                userMessage: userMessage,
-                messages: history
-            })
-        });
+        // 1. Envoyer le message de l'étudiant
+        const userMessage = await sendChatMessage(sessionId, question, 'learner');
+        console.log('✅ User message posted:', userMessage);
 
-        if (!response.ok) {
-            console.warn('Analysis failed, returning neutral');
-            return { status: 'good', justification: 'Analyse non disponible.' };
-        }
+        // 2. Récupérer l'historique pour obtenir la réponse du patient
+        // (L'IA a déjà répondu de manière synchrone, donc on récupère le dernier message)
+        const history = await getChatHistory(sessionId, 10); // Les 10 derniers messages
+        
+        // 3. Trouver la réponse du patient qui suit notre message
+        const patientResponse = history.messages.find(
+            msg => msg.sender === 'patient' && 
+                   new Date(msg.timestamp) > new Date(userMessage.timestamp)
+        );
 
-        const data = await response.json();
-        console.log('✅ Analysis result:', data);
+        console.log('✅ Patient response:', patientResponse);
+        console.groupEnd();
 
         return {
-            status: data.status || 'good',
-            justification: data.justification || 'Continuez.'
+            userMessage,
+            patientResponse: patientResponse || null
         };
-    } catch (error: any) {
-        console.error('❌ Analysis error:', error);
-        return { status: 'good', justification: 'Service indisponible.' };
+
+    } catch (error) {
+        console.error('❌ Error in chat flow:', error);
+        console.groupEnd();
+        throw error;
     }
 };
 
-export const requestHintFromTutor = async (
-    caseId: number,
-    learnerId: string,
-    messages: MessageHistory[]
+/**
+ * ALTERNATIVE: Si le backend retourne directement la réponse du patient dans l'objet
+ * (à vérifier selon votre implémentation exacte)
+ */
+export const sendMessageAndGetResponse = async (
+    sessionId: string,
+    question: string
 ): Promise<string> => {
-    console.log('💡 [REQUEST HINT via Proxy]');
-
     try {
-        const response = await fetch(API_PROXY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mode: 'hint',
-                caseId: caseId,
-                learnerId: learnerId,
-                messages: messages
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Service indisponible');
+        // L'endpoint étant synchrone, il retourne peut-être directement la réponse IA
+        const response = await sendChatMessage(sessionId, question, 'learner');
+        
+        // Si la réponse contient déjà le message du patient
+        if (response.sender === 'patient') {
+            return response.content;
         }
 
-        const data = await response.json();
-        console.log('✅ Hint received:', data);
+        // Sinon, on fait une requête supplémentaire pour récupérer la réponse
+        const history = await getChatHistory(sessionId, 5);
+        const lastPatientMessage = history.messages
+            .filter(m => m.sender === 'patient')
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
 
-        return data.content || data.hint || 'Revenez aux bases de la sémiologie.';
+        return lastPatientMessage?.content || "Le patient ne répond pas.";
+
     } catch (error: any) {
-        console.error('❌ Hint error:', error);
-        throw new Error('Impossible d\'obtenir un indice pour le moment.');
-    }
-};
-
-export const requestExamResult = async (
-    caseId: number,
-    examName: string,
-    examReason: string
-): Promise<string> => {
-    console.log('🔬 [REQUEST EXAM via Proxy]');
-
-    try {
-        const response = await fetch(API_PROXY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mode: 'exam',
-                caseId: caseId,
-                examName: examName,
-                examReason: examReason
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Laboratoire indisponible');
-        }
-
-        const data = await response.json();
-        console.log('✅ Exam result:', data);
-
-        return data.resultat || data.result || 'Résultat non disponible.';
-    } catch (error: any) {
-        console.error('❌ Exam error:', error);
-        return 'Le laboratoire n\'a pas pu traiter cette demande.';
-    }
-};
-
-export const evaluateDiagnosis = async (
-    caseId: number,
-    learnerId: string,
-    messages: MessageHistory[],
-    userDiagnosis: string,
-    userPrescription: string
-): Promise<any> => {
-    console.log('📊 [EVALUATE DIAGNOSIS via Proxy]');
-
-    try {
-        const response = await fetch(API_PROXY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mode: 'grade',
-                caseId: caseId,
-                learnerId: learnerId,
-                messages: messages,
-                userDiagnosis: userDiagnosis,
-                userPrescription: userPrescription
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Service d\'évaluation indisponible');
-        }
-
-        const data = await response.json();
-        console.log('✅ Evaluation result:', data);
-
-        return data;
-    } catch (error: any) {
-        console.error('❌ Evaluation error:', error);
-        throw new Error('Impossible d\'évaluer le diagnostic pour le moment.');
+        console.error('Error sending message:', error);
+        throw new Error(error.message || 'Erreur communication chat');
     }
 };

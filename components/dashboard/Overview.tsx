@@ -128,7 +128,7 @@ const Overview: React.FC = () => {
   if (isLoading) return <DashboardLoader />;
 
   return (
-    <div className="flex flex-col h-full bg-[#f6f8fb] overflow-hidden p-6 md:p-8 rounded-tl-3xl">
+    <div className="flex flex-col h-full bg-[#f6f8fb] overflow-hidden p-0 rounded-tl-3xl">
       
       {/* HEADER BAR (Static structure, dynamic search disabled logic for now) */}
       <div className="flex justify-between items-center mb-8">
@@ -153,10 +153,10 @@ const Overview: React.FC = () => {
          </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2 pb-10 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto pr-2 pb-0 custom-scrollbar">
       
         {/* HERO SECTION */}
-        <div className="bg-white rounded-3xl p-8 mb-8 relative shadow-sm overflow-hidden flex items-center justify-between min-h-[320px]">
+        <div className="bg-white rounded-3xl p-8 mb-8 relative shadow-sm overflow-hidden flex items-center justify-between min-h-[250px]">
              <div className="max-w-lg z-10 relative">
                  <h1 className="text-3xl font-bold text-gray-900 mb-2">
                      Bonjour, <span className="text-amber-400 capitalize">{userInfo?.nom?.split(' ')[0] || "Docteur"}</span>
@@ -171,7 +171,7 @@ const Overview: React.FC = () => {
              </div>
 
              {/* Illustration (Utilisation image placeholder si asset manquant pour pas casser le build) */}
-             <div className="hidden md:block absolute right-10 bottom-0 h-full w-1/3 pointer-events-none">
+             <div className="hidden md:block absolute right-10 top-8 bottom-0 h-full w-1/3 pointer-events-none">
                  <div className="w-full h-full flex items-end justify-center relative">
                       <img 
                         src='/images/appre1.jpg' 
@@ -181,64 +181,10 @@ const Overview: React.FC = () => {
                             e.currentTarget.src = "https://placehold.co/400x500/png?text=Docteur"; // Fallback safe
                         }} 
                       />
-                      <div className="absolute bottom-0 bg-indigo-100 h-3/4 w-3/4 rounded-t-full opacity-50 z-0"></div>
                  </div>
-                 {/* Blob BG */}
-                 <div className="absolute top-1/2 right-0 w-64 h-64 bg-blue-100/50 rounded-full blur-3xl -z-10"></div>
              </div>
         </div>
 
-        {/* VITALS CARDS - Connecté au Backend */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            
-            {/* CARD 1: Activité (BPM / Frequency) */}
-            <div className="bg-white p-4 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300">
-               <div className="flex items-center gap-3 mb-2">
-                   <div className="p-2 rounded-xl bg-red-50 text-red-500">
-                      <Heart className="w-5 h-5 fill-current" />
-                   </div>
-                   <span className="text-red-500 font-bold text-lg">{stats.avgScore} <span className="text-xs font-normal text-red-300">Sessions</span></span>
-               </div>
-               <p className="text-gray-900 font-bold text-sm">Volume Pratique</p>
-               <p className="text-[10px] text-gray-400 mt-1 leading-tight">Sessions d'apprentissage totales</p>
-            </div>
-
-            {/* CARD 2: Cognitif */}
-            <div className="bg-white p-4 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300">
-               <div className="flex items-center gap-3 mb-2">
-                   <div className="p-2 rounded-xl bg-blue-50 text-blue-500">
-                      <Zap className="w-5 h-5 fill-current" />
-                   </div>
-                   <span className="text-blue-500 font-bold text-lg">{stats.cognitiveLevel}/10</span>
-               </div>
-               <p className="text-gray-900 font-bold text-sm">Vitesse Cognitive</p>
-               <p className="text-[10px] text-gray-400 mt-1 leading-tight">Index d'assimilation (Backend)</p>
-            </div>
-
-             {/* CARD 3 - Highlighted (Compétences) */}
-             <div className="bg-[#312e81] p-4 rounded-3xl shadow-lg shadow-indigo-900/20 text-white transform md:scale-105 transition-transform">
-               <div className="flex items-center gap-3 mb-2">
-                   <div className="p-2 rounded-xl bg-white/20 text-white">
-                      <Activity className="w-5 h-5" />
-                   </div>
-                   <span className="text-white font-bold text-lg">{stats.competencies}</span>
-               </div>
-               <p className="text-white font-bold text-sm">Compétences</p>
-               <p className="text-[10px] text-gray-300 mt-1 leading-tight">Validées / Maîtrisées (&gt;70%)</p>
-            </div>
-
-             {/* CARD 4: Objectifs */}
-             <div className="bg-white p-4 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300">
-               <div className="flex items-center gap-3 mb-2">
-                   <div className="p-2 rounded-xl bg-yellow-50 text-yellow-500">
-                      <Droplets className="w-5 h-5 fill-current" />
-                   </div>
-                   <span className="text-yellow-500 font-bold text-lg">{stats.objectives}%</span>
-               </div>
-               <p className="text-gray-900 font-bold text-sm">Objectifs</p>
-               <p className="text-[10px] text-gray-400 mt-1 leading-tight">Taux de réalisation actuel</p>
-            </div>
-        </div>
 
         {/* BOTTOM SECTION: ANALYTICS (Charts dynamiques) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

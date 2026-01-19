@@ -39,7 +39,7 @@ export default function ExpertSidebar() {
                     <HeartPulse className="text-blue-400" />
                 </div>
                 <div className={`overflow-hidden transition-all duration-300 ${isHovered ? 'w-auto opacity-100' : 'w-0 opacity-0'}`}>
-                    <span className="font-bold text-lg whitespace-nowrap">GoDoc<span className="text-blue-400">+</span> Expert</span>
+                    <span className="font-bold text-lg whitespace-nowrap">The Good<span className="text-blue-400">Doctor</span> Expert</span>
                 </div>
            </div>
         </div>

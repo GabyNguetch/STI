@@ -74,6 +74,8 @@ export interface BackendClinicalCaseSimple {
         categorie: string;
     };
     created_at: string;
+    nb_images: number;
+    nb_sons: number;
 }
 
 // ... existants ...

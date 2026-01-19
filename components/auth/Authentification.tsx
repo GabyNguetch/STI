@@ -70,7 +70,7 @@ export default function AuthForm({ mode, onSuccess }: AuthFormProps) {
             <div className="w-20 h-20 bg-gradient-to-br from-[#052648] to-[#0a4d8f] rounded-2xl flex items-center justify-center mb-4 shadow-lg">
               <Link href='/'><HeartPulse className='text-white h-10 w-10' /></Link> 
             </div>
-            <span className="text-4xl font-bold text-[#052648] mb-2">FullTang</span>
+            <span className="text-4xl font-bold text-[#052648] mb-2">The Good Doctor</span>
             <p className="text-gray-600 text-center text-lg">
               Gérez votre formation médicale avec notre plateforme intuitive.
             </p>

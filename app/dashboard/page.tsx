@@ -190,7 +190,7 @@ export default function DashboardPage() {
         `}
       >
         {/* HEADER DYNAMIQUE STICKY */}
-        {!activeView === 'overview' && (
+        {activeView !== 'overview' && (
                 <DashboardHeader activeView={activeView} user={user} />
           )}
         {/* ZONE DE CONTENU SCROLLABLE */}
@@ -199,53 +199,12 @@ export default function DashboardPage() {
             
             <div className={`max-w-7xl mx-auto h-full animate-in fade-in slide-in-from-bottom-4 duration-500`}>
               
-              {activeView === 'overview' && (
-                <Overview user={user} trace={trace} />
-              )}
-              
-              {activeView === 'practice' && (
-                <div className="min-h-full">
-                  <Library user={user} trace={trace} />
-                </div>
-              )}
-              
-              {activeView === 'lessons' && (
-                // On simule des jalons provenant du back ou statiques
-                <Journey 
-                  allMilestones={[]} 
-                  userProgress={[]} 
-                />
-              )}
-
-              {activeView === 'goals' && (
-                 <Goals />
-              )}
-
-              {activeView === 'achievements' && (
-                <div className="flex flex-col items-center justify-center h-96 text-slate-400 bg-white rounded-3xl border border-slate-200 border-dashed">
-                  <Trophy size={64} className="mb-4 text-yellow-500 opacity-80 animate-bounce" />
-                  <h2 className="text-xl font-bold text-slate-600">Salle des Trophées</h2>
-                  <p>Module en construction. Bientôt vos certificats ici.</p>
-                </div>
-              )}
-
-              {activeView === 'settings' && (
-                <Settings />
-              )}
-
-              {activeView === 'competencies' && (
-                <Skills />
-              )}
-              
-
-              {activeView === 'profile' && (
-                 // Redirection vers page complète profile ou composant inline
-                 <div className="flex items-center justify-center h-full">
-                    <button onClick={() => router.push('/profile')} className="px-6 py-3 bg-[#052648] text-white rounded-xl shadow-lg hover:scale-105 transition-transform">
-                        Voir la page Profil Complète
-                    </button>
-                 </div>
-              )}
+              {activeView === 'overview' && <Overview user={user} trace={trace} />}
+              {activeView === 'goals' && <Goals />} 
+              {activeView === 'competencies' && <Skills />}
+              {activeView === 'practice' && <Library />} 
+              {activeView === 'journey' && <Journey allMilestones={[]} userProgress={[]} />} 
+              {activeView === 'analytic_profile' && <div className='p-10 text-center text-slate-500'>Module Profil Complet à venir</div>}
 
             </div>
         </div>

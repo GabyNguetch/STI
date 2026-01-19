@@ -10,7 +10,8 @@ import {
   ScanFace,         // Pour Profil Cognitif/Analyse
   LogOut, 
   HeartPulse, 
-  ChevronRight 
+  ChevronRight, 
+  Play
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -38,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
     { 
       id: 'goals', 
       label: 'Objectifs', 
-      icon: Target 
+      icon: Play 
     },
     { 
       id: 'journey', 
@@ -82,8 +83,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
             </div>
 
             <div className={`flex flex-col whitespace-nowrap overflow-hidden transition-all duration-500 ease-in-out ${isHovered ? 'w-auto opacity-100 ml-2' : 'w-0 opacity-0 ml-0'}`}>
-               <span className="text-xl font-extrabold text-[#052648] tracking-tight">FullTang</span>
-               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Student</span>
+               <span className="text-xl font-extrabold text-[#052648] tracking-tight">The Good Doctor</span>
+               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Etudiant</span>
             </div>
           </div>
         </div>

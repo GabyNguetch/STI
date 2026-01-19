@@ -201,4 +201,10 @@ export const LearnerService = {
   getTraces: async (learner_id: number): Promise<TraceResponse> => {
     return await learnerFetch<TraceResponse>(`/learner/traces?learner_id=${learner_id}&limit=10`, { method: 'GET' });
   },
+
+  // On ajoute cette méthode spécifique pour les "maîtrises de compétences" demandées par l'onglet Skills
+  getListMastery: async (learner_id: number): Promise<any[]> => {
+       // Cette route correspond à /competency-mastery/learner/{learner_id} dans votre OpenAPI
+      return await learnerFetch<any[]>(`/competency-mastery/learner/${learner_id}`, { method: 'GET' });
+  },
 };

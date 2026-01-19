@@ -561,7 +561,7 @@ export default function CaseLibrary() {
                         <LayoutGrid className="text-blue-500"/> Encyclopédie Clinique
                      </h1>
                      <p className="text-slate-500 text-sm mt-1">
-                        Explorez {filteredCases.length} cas. (Limite d'affichage serveur potentielle)
+                        Explorez les {filteredCases.length} cas cliniques existants. 
                      </p>
                  </div>
                  
@@ -602,7 +602,7 @@ export default function CaseLibrary() {
                                     className="group bg-white rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden h-[300px] flex flex-col"
                                 >
                                     {/* Cover Visual */}
-                                    <div className="h-24 bg-gradient-to-br from-slate-50 to-slate-200 relative flex items-center justify-center border-b border-slate-100 overflow-hidden">
+                                    <div className="h-36 bg-gradient-to-br from-slate-50 to-slate-200 relative flex items-center justify-center border-b border-slate-100 overflow-hidden">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-[#052648]/5 rounded-full blur-2xl transform translate-x-4 -translate-y-4"></div>
                                         <div className="absolute top-2 left-3 bg-white/90 backdrop-blur text-[9px] font-bold text-slate-500 uppercase px-2 py-0.5 rounded shadow-sm border border-slate-100">{cat}</div>
                                         
@@ -622,8 +622,8 @@ export default function CaseLibrary() {
 
                                         <div className="mt-auto pt-3 border-t border-slate-50 flex items-center justify-between text-[10px] text-slate-500 font-semibold uppercase tracking-wide">
                                              <div className="flex gap-2">
-                                                 {(c.nb_images ?? 0) > 0 && <span className="flex items-center gap-1 text-blue-600"><ImageIcon size={12}/> Images</span>}
-                                                 {(c.nb_sons ?? 0) > 0 && <span className="flex items-center gap-1 text-purple-600"><Activity size={12}/> Audio</span>}
+                                                <span className="flex items-center gap-1 text-blue-600"> {c.nb_images} Images <ImageIcon size={12}/></span>
+                                                 <span className="flex items-center gap-1 text-purple-600"> {c.nb_sons} Audio <Activity size={12}/></span>
                                              </div>
                                              <div className="group-hover:translate-x-1 transition-transform text-[#052648]">
                                                  Ouvrir <ArrowRight size={10} className="inline ml-0.5"/>
