@@ -2,89 +2,144 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { createClient } from '@/lib/supabaseClient';
-import type { Session, User } from '@supabase/supabase-js';
-import type { UserProfile } from '@/types/user/profile'; // <-- Importer le type du profil
 import { useRouter } from 'next/navigation';
+import { 
+  LearnerResponse, 
+  LearnerCreate, 
+  loginLearner, 
+  createLearner, 
+  getLearnerMe 
+} from '@/services/learnerService';
+import toast from 'react-hot-toast';
 
-
-const supabase = createClient();
+// Type pour les données temporaires (ce qu'on remplit dans AuthForm)
+interface TempData {
+  nom: string;
+  email: string;
+  // Le reste sera rempli dans Onboarding
+}
 
 interface AuthContextType {
-  session: Session | null;
-  user: User | null;
-  profile: UserProfile | null; // <-- AJOUT : pour stocker les données de la table 'profiles'
+  user: LearnerResponse | null;
+  isAuthenticated: boolean;
   isLoading: boolean;
-  signOut: () => Promise<void>;
+  
+  // Stockage temporaire inscription (Etape 1 -> Etape 2)
+  tempRegistrationData: TempData | null;
+  saveTempRegistration: (data: TempData) => void;
+  
+  // Actions
+  finalizeRegistration: (completeData: LearnerCreate) => Promise<void>;
+  login: (email: string, matricule: string) => Promise<void>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null); // <-- AJOUT : état pour le profil
-  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const [user, setUser] = useState<LearnerResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Données temporaires conservées dans l'état (ou LocalStorage si on veut persistance au refresh)
+  const [tempRegistrationData, setTempDataState] = useState<TempData | null>(null);
 
+  // --- Initialisation : Vérifier si déjà connecté ---
   useEffect(() => {
-    const getInitialData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        setProfile(userProfile);
+    const initAuth = async () => {
+      // Restaurer temp data si refresh page
+      const savedTemp = localStorage.getItem('temp_reg_data');
+      if (savedTemp) setTempDataState(JSON.parse(savedTemp));
+
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        try {
+          const userData = await getLearnerMe(token);
+          setUser(userData);
+        } catch {
+          logout(); // Token invalide
+        }
       }
-      
-      setSession(session);
-      setUser(session?.user ?? null);
       setIsLoading(false);
     };
-
-    getInitialData();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        setProfile(userProfile);
-      } else {
-        setProfile(null); // Vider le profil à la déconnexion
-      }
-
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (isLoading) setIsLoading(false);
-    });
-
-    return () => subscription?.unsubscribe();
+    initAuth();
   }, []);
 
-  const value = {
-    session,
-    user,
-    profile, // <-- Exposer le profil dans la valeur du contexte
-    isLoading,
-    signOut: async () => {
-        await supabase.auth.signOut();
-        router.push('/connexion'); // Optionnel : redirection après déconnexion
-    },
+  // 1. Sauvegarder nom/email temporairement
+  const saveTempRegistration = (data: TempData) => {
+    setTempDataState(data);
+    localStorage.setItem('temp_reg_data', JSON.stringify(data));
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // 2. Finaliser inscription (Appelé à la fin du Onboarding)
+  const finalizeRegistration = async (completeData: LearnerCreate) => {
+    try {
+      setIsLoading(true);
+      // a. Créer l'apprenant en base
+      await createLearner(completeData);
+      
+      // b. Auto-login pour récupérer le token
+      await login(completeData.email, completeData.matricule);
+      
+      // c. Nettoyer
+      localStorage.removeItem('temp_reg_data');
+      setTempDataState(null);
+      
+      // Pas de redirection ici, on laisse le composant UI gérer l'affichage du succès
+    } catch (error: any) {
+      console.error(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = async (email: string, matricule: string) => {
+    try {
+      setIsLoading(true);
+      const { access_token } = await loginLearner({ email, matricule });
+      
+      // Stockage Token
+      localStorage.setItem('access_token', access_token);
+      
+      // Chargement profil
+      const userProfile = await getLearnerMe(access_token);
+      setUser(userProfile);
+      
+      toast.success(`Bienvenue, Dr. ${userProfile.nom} !`);
+      router.push('/dashboard');
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('access_token');
+    setUser(null);
+    router.push('/connexion');
+  };
+
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      isAuthenticated: !!user, 
+      isLoading,
+      tempRegistrationData,
+      saveTempRegistration,
+      finalizeRegistration, 
+      login, 
+      logout 
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

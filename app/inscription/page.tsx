@@ -2,23 +2,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { User } from '@supabase/supabase-js'; // <-- Importer le type User
 import AuthForm from "@/components/auth/Authentification";
-import Onboarding from '@/components/auth/Onboarding';
+import Onboarding from "@/components/auth/Onboarding";
 
 export default function InscriptionPage() {
-  // MODIFIÉ : Au lieu d'un booléen, nous stockons l'objet utilisateur ou null.
-  const [newlyRegisteredUser, setNewlyRegisteredUser] = useState<User | null>(null);
+  const [registrationStarted, setRegistrationStarted] = useState(false);
 
-  // Si un utilisateur vient de s'inscrire, nous avons son objet.
-  if (newlyRegisteredUser) {
-    // On affiche l'onboarding en lui passant directement l'utilisateur.
-    // La prop "user" est ajoutée pour passer les données.
-    return <Onboarding user={newlyRegisteredUser} />;
+  // Si l'utilisateur a rempli la première étape (AuthForm), on affiche l'Onboarding
+  if (registrationStarted) {
+    return <Onboarding />;
   }
   
-  // Par défaut, on affiche le formulaire d'inscription.
-  // La prop `onSuccess` est maintenant une fonction qui attend un objet User
-  // et met à jour notre état local.
-  return <AuthForm mode="register" onSuccess={(user) => setNewlyRegisteredUser(user)} />;
+  // Sinon, formulaire initial (Nom/Email -> LocalStorage)
+  return <AuthForm mode="register" onSuccess={() => setRegistrationStarted(true)} />;
 }

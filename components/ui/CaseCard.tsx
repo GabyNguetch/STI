@@ -92,15 +92,6 @@ export function CaseCard({ useCase, service }: CaseCardProps) {
                   <p className="text-sm text-slate-500">{useCase.patient.nom}, {useCase.patient.age} ans</p>
                 </div>
               </div>
-
-              {/* ✨ AMÉLIORATION : Badge de difficulté "glassmorphism" */}
-              <div className={`
-                text-xs font-semibold px-3 py-1.5 rounded-md backdrop-blur-sm shadow-md border 
-                transition-transform duration-300 group-hover:scale-110
-                ${styles.bg} ${styles.text} ${styles.border}
-              `}>
-                {useCase.difficulty}
-              </div>
             </div>
             
             {/* ✨ AMÉLIORATION : Section "Motif" avec hiérarchie visuelle claire */}
@@ -117,7 +108,7 @@ export function CaseCard({ useCase, service }: CaseCardProps) {
                     {/* MODIFIÉ : <Link> est remplacé par <button> */}
                     <button 
                         onClick={handleStartCase}
-                        className="relative group/button w-full h-12 flex items-center justify-center gap-2 text-base font-bold text-white rounded-lg shadow-lg overflow-hidden bg-gradient-to-br from-[#052648] to-[#0a4d8f] transition-all duration-300 ease-out hover:from-[#0a4d8f] hover:to-[#052648] hover:shadow-xl active:scale-95 transform"
+                        className="relative group/button w-full h-12 flex items-center justify-center gap-2 text-base font-bold text-white rounded-lg shadow-lg overflow-hidden bg-slate-500 transition-all duration-300 ease-out hover:from-[#0a4d8f] hover:to-[#052648] hover:shadow-xl active:scale-95 transform"
                     >
                         <span className="z-10">Lancer le cas</span>
                         <ArrowRight className="z-10 w-5 h-5 transition-transform duration-300 group-hover/button:translate-x-1" />

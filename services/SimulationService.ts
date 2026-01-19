@@ -1,112 +1,182 @@
-// ================================================================================
-// FICHIER: services/SimulationService.ts
-// ================================================================================
+// services/SimulationService.ts
+import { apiClient } from '@/lib/apiClient';
 
-import { createClient } from '@/lib/supabaseClient';
-import { Patient, UseCase, GameResult, Message } from '@/types/simulation/types';
+// ================= TYPES API BACKEND =================
 
-const supabase = createClient();
+export interface StartSessionResponse {
+    session_id: string;
+    session_type: 'diagnostic' | 'training' | 'evaluation';
+    current_step: number;
+    total_steps: number;
+    hints_allowed: number;
+    max_messages: number;
+    clinical_case: {
+        id: number;
+        code_fultang: string;
+        presentation_clinique: any;
+        donnees_paracliniques: any;
+        pathologie_principale: any;
+    };
+}
+
+export interface ActionRequest {
+    action_type: 'question' | 'examen_complementaire' | 'consulter_image' | 'parametres_vitaux';
+    action_name: string;
+    content?: string;
+    justification?: string;
+}
+
+export interface ActionResponse {
+    action_type: string;
+    action_name: string;
+    content?: string;
+    result?: {
+        rapport?: string;
+        conclusion?: string;
+        text?: string;
+        data?: any;
+    };
+    feedback?: string;
+}
+
+export interface SubmitRequest {
+    diagnosed_pathology_id: number;
+    details_text: string;
+    prescribed_medication_ids?: number[];
+    comment?: string;
+}
+
+export interface SubmitResponse {
+    session_id: string;
+    score: number;
+    feedback_global: string;
+    evaluation: {
+        score_total: number;
+        details: any;
+    };
+    next_action: 'next_case' | 'retry_level' | 'module_completed';
+}
+
+export interface GoalStatus {
+    category: string;
+    level_name: string;
+    phase: 'diagnostic' | 'training' | 'evaluation';
+    cas_completed: number;
+    total_cases_phase: number;
+    score_avg: number;
+    locked: boolean;
+}
+
+// ================= ENDPOINTS =================
 
 /**
- * Charge un cas depuis Supabase. Si difficulty est fourni, filtre. 
- * Sinon, prend un cas aléatoire dans le service.
+ * Démarre une nouvelle session de simulation
+ * Le backend gère automatiquement la logique de reprise ou création
  */
-export const fetchClinicalCase = async (serviceId: string, difficulty?: string): Promise<UseCase | null> => {
-  let query = supabase
-    .from('clinical_cases')
-    .select('*')
-    .eq('service_id', serviceId); // Note: colonne en snake_case dans la DB
+export const startSimulationSession = async (
+    learnerId: number,
+    caseId: number | null = null,
+    category: string,
+    forceMode?: 'diagnostic' | 'training' | 'evaluation'
+): Promise<string> => {
+    const payload: any = {
+        learner_id: learnerId,
+        category: category
+    };
 
-  if (difficulty) {
-    query = query.eq('difficulty', difficulty);
-  }
+    if (caseId) payload.case_id = caseId;
+    if (forceMode) payload.force_mode = forceMode;
 
-  const { data, error } = await query;
+    const response = await apiClient<StartSessionResponse>(
+        '/simulation/sessions/start',
+        {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }
+    );
 
-  if (error) {
-    console.error("Erreur chargement cas:", error);
-    return null;
-  }
-
-  if (!data || data.length === 0) return null;
-
-  // Sélection aléatoire parmi les cas trouvés (si plusieurs cas même difficulté)
-  const randomCase = data[Math.floor(Math.random() * data.length)];
-
-  // Mapping DB -> Frontend Types
-  return {
-    id: randomCase.id,
-    serviceId: randomCase.service_id,
-    difficulty: randomCase.difficulty,
-    patient: randomCase.patient // La colonne patient est JSONB, elle contient tout
-  };
+    return response.session_id;
 };
 
 /**
- * Enregistre qu'un utilisateur a démarré un cas
+ * Envoie une action (question ou examen) dans la session
  */
-export const startCaseForUser = async (caseId: string, userId: string) => {
-  const { error } = await supabase
-    .from('user_case_progress')
-    .upsert({ // Upsert pour éviter les doublons si l'user redémarre le même cas
-        user_id: userId,
-        case_id: caseId,
-        started_at: new Date().toISOString(),
-        status: 'started'
-    }, { onConflict: 'user_id, case_id' }); // Supposant une contrainte unique
-
-  if (error) console.error("Erreur startCase:", error);
+export const sendSimulationAction = async (
+    sessionId: string,
+    request: ActionRequest
+): Promise<ActionResponse> => {
+    return await apiClient<ActionResponse>(
+        `/simulation/sessions/${sessionId}/actions`,
+        {
+            method: 'POST',
+            body: JSON.stringify(request)
+        }
+    );
 };
 
 /**
- * Sauvegarde l'évaluation finale et met à jour le statut
+ * Demande un indice au tuteur
  */
-export const saveEvaluation = async (
-  userId: string,
-  caseId: string,
-  result: GameResult,
-  transcript: Message[],
-  studentDiagnosis: string,
-  studentPrescription: string
-) => {
-  // 1. Sauvegarde dans la table des évaluations (historique complet)
-  const { error: evalError } = await supabase
-    .from('evaluations')
-    .insert({
-        user_id: userId,
-        case_id: caseId,
-        score: result.score,
-        feedback: result.feedback,
-        diagnosis_status: result.diagnosisStatus,
-        missed_steps: JSON.stringify(result.missedSteps),
-        transcript: JSON.stringify(transcript), // On stocke le chat complet
-        student_diagnosis: studentDiagnosis,
-        student_prescription: studentPrescription
-    });
-
-  if (evalError) console.error("Erreur save eval:", evalError);
-
-  // 2. Met à jour la progression globale (Score + Statut terminé)
-  const { error: progressError } = await supabase
-    .from('user_case_progress')
-    .update({ 
-        status: 'completed', 
-        score: Math.round((result.score / 20) * 100) // Convertir sur 100 pour le dashboard
-    })
-    .match({ user_id: userId, case_id: caseId });
-
-  if (progressError) console.error("Erreur update progress:", progressError);
+export const requestSimulationHint = async (
+    sessionId: string
+): Promise<{ hint_type: string; content: string; remaining_hints: number }> => {
+    return await apiClient(
+        `/simulation/sessions/${sessionId}/request-hint`,
+        {
+            method: 'POST',
+            body: JSON.stringify({})
+        }
+    );
 };
 
-// Utilisé pour la page Bibliothèque
-export const fetchCases = async (): Promise<UseCase[]> => {
-    const { data, error } = await supabase.from('clinical_cases').select('*');
-    if (error || !data) return [];
-    
-    return data.map(c => ({
-        id: c.id,
-        serviceId: c.service_id,
-        difficulty: c.difficulty,
-        patient: c.patient
-    }));
+/**
+ * Soumet le diagnostic final et la prescription
+ */
+export const submitSimulationDiagnosis = async (
+    sessionId: string,
+    diagnosisText: string,
+    prescriptionText: string
+): Promise<SubmitResponse> => {
+    return await apiClient<SubmitResponse>(
+        `/simulation/sessions/${sessionId}/submit`,
+        {
+            method: 'POST',
+            body: JSON.stringify({
+                diagnosed_pathology_id: 0,
+                details_text: diagnosisText,
+                comment: prescriptionText
+            })
+        }
+    );
+};
+
+/**
+ * Récupère le statut de progression pour toutes les catégories
+ */
+export const getLearnerGoalsStatus = async (
+    learnerId: number
+): Promise<GoalStatus[]> => {
+    try {
+        return await apiClient<GoalStatus[]>(
+            `/learners/${learnerId}/goals_status`
+        );
+    } catch (error) {
+        console.warn('Goals API not available, using mock data');
+        // Fallback en attendant l'implémentation backend
+        return [];
+    }
+};
+
+/**
+ * Récupère les détails d'une session spécifique
+ */
+export const getSessionDetails = async (sessionId: string) => {
+    return await apiClient(`/simulation/sessions/${sessionId}`);
+};
+
+/**
+ * Récupère l'historique des messages d'une session
+ */
+export const getSessionMessages = async (sessionId: string) => {
+    return await apiClient(`/chat/sessions/${sessionId}/messages`);
 };

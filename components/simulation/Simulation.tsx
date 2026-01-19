@@ -1,492 +1,644 @@
-// app/simulation/page.tsx
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
-import { Stethoscope, X, Lightbulb, Thermometer, Gauge, Wind, RefreshCcw } from 'lucide-react';
-import Link from 'next/link';
-import toast from 'react-hot-toast';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import toast from 'react-hot-toast';
+import { Thermometer, Gauge, Wind, Lightbulb } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchClinicalCase } from '@/services/SimulationService';
 import { services } from '@/types/simulation/constant';
-import { Patient, Service, Message, ClinicalExam, GameResult, GameState } from '@/types/simulation/types';
-import { exampleExams } from '@/types/simulation/constant';
 import { PROFANITY_LIST } from '@/types/simulation/grosmot';
+import { Patient, Service, Message, GameState } from '@/types/simulation/types';
+import { exampleExams } from '@/types/simulation/constant';
+
+import {
+    startSimulationSession,
+    sendSimulationAction,
+    requestSimulationHint,
+    submitSimulationDiagnosis
+} from '@/services/SimulationService';
+import { getClinicalCaseById } from '@/services/expertService';
+import {
+    sendMessageToRAG,
+    analyzeQuestionQuality,
+    requestHintFromTutor,
+    requestExamResult,
+    evaluateDiagnosis
+} from '@/services/ChatService';
 
 import HomeView from '@/components/simulation/HomeView';
-import PatientInfoView from '@/components/simulation/PatientInfoView';
 import ConsultationView from '@/components/simulation/ConsultationView';
 
-// --- 1. COMPOSANT INTERNE (Logique) ---
+// ========== UTILITAIRE DE MAPPING ==========
+const mapPatientToUI = (data: any): Patient => {
+    const pClinique = data.presentation_clinique || {};
+    const dPara = data.donnees_paracliniques || {};
+
+    let signes = 'Non spécifiés';
+    if (dPara.signes_vitaux) {
+        if (typeof dPara.signes_vitaux === 'object') {
+            signes = Object.entries(dPara.signes_vitaux)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(', ');
+        } else {
+            signes = String(dPara.signes_vitaux);
+        }
+    }
+
+    return {
+        nom: data.code_fultang || `Patient #${data.id}`,
+        age: Math.floor(Math.random() * (60 - 20) + 20),
+        sexe: 'Masculin',
+        motif: pClinique.histoire_maladie?.substring(0, 80) + '...' || 'Motif inconnu',
+        antecedents:
+            (typeof pClinique.antecedents === 'string'
+                ? pClinique.antecedents
+                : pClinique.antecedents?.details) || 'Non précisés',
+        symptomes: 'À découvrir',
+        histoireMaladie: pClinique.histoire_maladie || '',
+        signesVitaux: signes,
+        temperature: '37°C',
+        pressionArterielle: '120/80',
+        saturationOxygene: '98%',
+        examenClinique: dPara.examen_clinique || '',
+        analyseBiologique: JSON.stringify(dPara.labo || ''),
+        diagnostic: data.pathologie_principale?.nom_fr || 'Inconnu',
+        traitementAttendu: 'Selon recommandations en vigueur'
+    };
+};
+
+// ========== COMPOSANT PRINCIPAL ==========
 const SimulationContent = () => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user, isLoading: isAuthLoading } = useAuth();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const { user, isLoading: isAuthLoading } = useAuth();
 
-  // --- CONFIG SCENARIO ---
-  const [caseSequenceId, setCaseSequenceId] = useState(1040); // Départ demandé 1040
-  const TUTOR_LIMIT = 5;  // Phase tutorée
-  const MAX_QUESTIONS = 10; // Phase libre
+    // Navigation
+    const [currentView, setCurrentView] = useState<'home' | 'loading' | 'consultation'>('home');
+    const hasInitialized = useRef(false);
 
-  // --- ÉTATS GLOBAUX ---
-  const [currentView, setCurrentView] = useState('home');
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const [patientData, setPatientData] = useState<Patient | null>(null);
-  
-  // États Chat
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [questionsCount, setQuestionsCount] = useState(0); // Docteur -> Patient seulement
-  
-  // États Jeu
-  const [gameState, setGameState] = useState<GameState>('asking');
-  const [hintsUsed, setHintsUsed] = useState(0);
-  const MAX_HINTS = 3;
-  const [userDiagnosis, setUserDiagnosis] = useState('');
-  const [finalResult, setFinalResult] = useState<GameResult | null>(null);
-  const [showResultModal, setShowResultModal] = useState(false);
+    // Session
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [caseId, setCaseId] = useState<number | null>(null);
+    const [sessionType, setSessionType] = useState<'diagnostic' | 'training' | 'evaluation'>(
+        'training'
+    );
+    const [selectedService, setSelectedService] = useState<Service | null>(null);
+    const [patientData, setPatientData] = useState<Patient | null>(null);
 
-  // Modales
-  const [isExamModalOpen, setIsExamModalOpen] = useState(false);
-  const [selectedExam, setSelectedExam] = useState<ClinicalExam | null>(null);
-  const [isDrugModalOpen, setIsDrugModalOpen] = useState(false); 
+    // Game State
+    const [gameState, setGameState] = useState<GameState>('asking');
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [inputMessage, setInputMessage] = useState('');
+    const [questionsCount, setQuestionsCount] = useState(0);
+    const [hintsUsed, setHintsUsed] = useState(0);
+    const [isTyping, setIsTyping] = useState(false);
 
-  // Protection Route
-  useEffect(() => {
-    if (!isAuthLoading && !user && currentView !== 'home') {
-      toast.error("Connexion requise.");
-      router.push('/connexion');
-    }
-  }, [user, isAuthLoading, router, currentView]);
+    // Modales
+    const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+    const [selectedExam, setSelectedExam] = useState<any>(null);
+    const [isDrugModalOpen, setIsDrugModalOpen] = useState(false);
+    const [userDiagnosis, setUserDiagnosis] = useState('');
+    const [finalResult, setFinalResult] = useState<any>(null);
+    const [showResultModal, setShowResultModal] = useState(false);
 
-  // Si on reçoit un caseId via URL (dashboard), on peut l'utiliser, sinon on force la logique séquentielle
-  useEffect(() => {
-      const urlId = searchParams.get('caseId');
-      if(urlId) setCaseSequenceId(parseInt(urlId));
-  }, [searchParams]);
+    // Constantes (dynamiques selon le type de session)
+    const [maxHints, setMaxHints] = useState(3);
+    const [maxQuestions, setMaxQuestions] = useState(10);
 
-  // --- 1. DÉMARRAGE DU CAS ---
-  const handleServiceSelect = async (service: Service) => {
-    if (!user) { router.push('/connexion'); return; }
+    // ========== PROTECTION ROUTE ==========
+    useEffect(() => {
+        if (!isAuthLoading && !user) {
+            if (currentView !== 'home') toast.error('Connexion requise');
+            router.push('/connexion');
+        }
+    }, [user, isAuthLoading, router, currentView]);
 
-    setIsLoading(true);
-    toast.loading(`Chargement Cas N°${caseSequenceId}...`, { id: 'loadCase' });
-    
-    try {
-        setSelectedService(service);
+    // ========== DÉMARRAGE VIA URL ==========
+    useEffect(() => {
+        const category = searchParams.get('category');
+        const mode = searchParams.get('mode') as 'diagnostic' | 'training' | 'evaluation' | null;
+
+        if (category && user && !hasInitialized.current) {
+            hasInitialized.current = true;
+            startSessionFlow(category, mode || 'training');
+        }
+    }, [searchParams, user]);
+
+    // ========== LOGIQUE DÉMARRAGE SESSION ==========
+    const startSessionFlow = async (
+        category: string,
+        mode: 'diagnostic' | 'training' | 'evaluation'
+    ) => {
+        if (!user?.id) return;
+        setCurrentView('loading');
+
+        const loadingToast = toast.loading('Connexion au système expert...');
+
+        try {
+            // Appel API pour démarrer la session
+            const sessionUuid = await startSimulationSession(
+                user.id,
+                null, // caseId géré par le backend
+                category,
+                mode
+            );
+
+            setSessionId(sessionUuid);
+            setSessionType(mode);
+
+            // IMPORTANT: Récupérer le vrai cas du backend ou utiliser un mock
+            // Pour l'instant on utilise un ID fixe pour tester
+            const testCaseId = 1040; // Remplacer par la vraie logique
+            setCaseId(testCaseId);
+
+            console.log('✅ Session started:', { sessionUuid, caseId: testCaseId, mode });
+
+            // Configuration des limites selon le type
+            if (mode === 'diagnostic') {
+                setMaxQuestions(5);
+                setMaxHints(0); // Pas d'indices en diagnostic
+            } else if (mode === 'training') {
+                setMaxQuestions(10);
+                setMaxHints(5); // 5 indices en formation
+            } else {
+                setMaxQuestions(10);
+                setMaxHints(3); // 3 indices en évaluation
+            }
+
+            // Charger les détails du cas (via votre service expert)
+            // Note: Idéalement le backend /start devrait retourner clinical_case complet
+            // Pour l'instant on simule avec un cas par défaut
+            const mockCaseData = {
+                id: 1040,
+                code_fultang: 'CAS-001',
+                presentation_clinique: {
+                    histoire_maladie: `Patient présentant des symptômes nécessitant une évaluation ${category}.`
+                },
+                donnees_paracliniques: {},
+                pathologie_principale: { nom_fr: 'À diagnostiquer', categorie: category }
+            };
+
+            const uiData = mapPatientToUI(mockCaseData);
+            setPatientData(uiData);
+
+            const visualService =
+                services.find(
+                    (s) =>
+                        s.name.toLowerCase().includes(category.toLowerCase()) ||
+                        category.toLowerCase().includes(s.id)
+                ) || services[0];
+            setSelectedService(visualService);
+
+            // Message initial selon le mode
+            let welcomeMsg = `Session ${
+                mode === 'diagnostic'
+                    ? 'de Test'
+                    : mode === 'training'
+                    ? "d'Entraînement"
+                    : "d'Évaluation"
+            } démarrée en ${category}.`;
+
+            if (mode === 'training') {
+                welcomeMsg +=
+                    ' Vos questions seront commentées par le tuteur (vert = bon, jaune = attention, rouge = mauvais).';
+            } else if (mode === 'evaluation') {
+                welcomeMsg +=
+                    ' Seules vos 3 premières questions seront commentées. Bonne chance !';
+            }
+
+            setMessages([
+                {
+                    sender: 'system',
+                    text: welcomeMsg,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+            ]);
+
+            setQuestionsCount(0);
+            setGameState('asking');
+            setCurrentView('consultation');
+            toast.dismiss(loadingToast);
+            toast.success('Session prête !');
+        } catch (err: any) {
+            console.error('❌ Erreur Start Session:', err);
+            let errorMsg = 'Erreur technique.';
+            try {
+                if (err.message && err.message.startsWith('{')) {
+                    const jsonErr = JSON.parse(err.message);
+                    if (jsonErr.detail) errorMsg = JSON.stringify(jsonErr.detail);
+                } else {
+                    errorMsg = err.message;
+                }
+            } catch {
+                errorMsg = 'Impossible de démarrer la session.';
+            }
+
+            toast.error(errorMsg, { id: loadingToast, duration: 4000 });
+            setCurrentView('home');
+            hasInitialized.current = false;
+        }
+    };
+
+    // ========== INTERACTION UTILISATEUR ==========
+    const handleLearnerAction = async (
+        content: string,
+        type: 'question' | 'exam' = 'question'
+    ) => {
+        // Mapper 'exam' vers le type approprié
+        const actionType = type === 'exam' ? 'examen_complementaire' : 'question';
+        return handleLearnerActionWithType(content, actionType);
+    };
+
+    // ========== DEMANDE INDICE ==========
+    const requestHint = async () => {
+        if (!sessionId || !caseId || !user) return;
+        if (sessionType === 'diagnostic') {
+            return toast.error("Pas d'indices en mode diagnostic.");
+        }
+        if (hintsUsed >= maxHints) {
+            return toast.error("Quota d'indices épuisé.");
+        }
+
+        const tid = toast.loading('Demande au tuteur...');
         
-        // MOCKUP FRONT (Le backend a la vérité via ID, ici on initialise juste l'UI)
-        const fakePatient: Patient = {
-            nom: "Patient (Chargement...)",
-            age: 35,
-            sexe: "Masculin",
-            motif: "Consultation en cours...",
-            antecedents: "", symptomes: "", signesVitaux: "", temperature: "", pressionArterielle: "",
-            saturationOxygene: "", examenClinique: "", analyseBiologique: "", diagnostic: "", traitementAttendu: ""
+        console.log('💡 [HINT REQUEST]', { caseId, userId: user.id, hintsUsed, maxHints });
+
+        try {
+            const hintContent = await requestHintFromTutor(
+                caseId,
+                user.id.toString(),
+                messages.map(m => ({
+                    sender: m.sender,
+                    text: m.text,
+                    time: m.time
+                }))
+            );
+
+            setMessages((prev) => [
+                ...prev,
+                {
+                    sender: 'tutor',
+                    text: hintContent,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    icon: Lightbulb
+                }
+            ]);
+            
+            setHintsUsed((prev) => prev + 1);
+            toast.success('Indice reçu !', { id: tid });
+            
+            console.log('✅ Hint delivered:', hintContent);
+
+        } catch (error: any) {
+            console.error('❌ Hint error:', error);
+            toast.error('Service indisponible.', { id: tid });
+        }
+    };
+
+    // ========== SOUMISSION FINALE ==========
+    const submitFinal = async (treatmentString: string) => {
+        if (!sessionId || !userDiagnosis.trim() || !caseId || !user) {
+            return toast.error('Diagnostic requis.');
+        }
+
+        const tid = toast.loading('Analyse finale en cours...');
+        setIsDrugModalOpen(false);
+
+        console.log('📊 [FINAL SUBMISSION]', {
+            caseId,
+            sessionId,
+            diagnosis: userDiagnosis,
+            prescription: treatmentString
+        });
+
+        try {
+            // Utiliser le service RAG pour l'évaluation
+            const evaluationResult = await evaluateDiagnosis(
+                caseId,
+                user.id.toString(),
+                messages.map(m => ({
+                    sender: m.sender,
+                    text: m.text,
+                    time: m.time
+                })),
+                userDiagnosis,
+                treatmentString
+            );
+
+            console.log('✅ Evaluation received:', evaluationResult);
+
+            // Adapter le format de la réponse
+            const formattedResult = {
+                score: evaluationResult.score || evaluationResult.note_totale || 0,
+                feedback_global: evaluationResult.feedback || evaluationResult.feedback_general || 'Évaluation terminée.',
+                evaluation: evaluationResult.evaluation || evaluationResult,
+                next_action: 'next_case' as const
+            };
+
+            setFinalResult(formattedResult);
+            setGameState('finished');
+            setShowResultModal(true);
+            toast.success('Terminé !', { id: tid });
+
+        } catch (error: any) {
+            console.error('❌ Submission error:', error);
+            toast.error('Erreur de soumission: ' + error.message, { id: tid });
+        }
+    };
+
+    // ========== HANDLERS UI ==========
+    const handleChatSubmit = (txt: string) => {
+        if (PROFANITY_LIST.some((bw) => txt.toLowerCase().includes(bw))) {
+            setMessages((p) => [
+                ...p,
+                { sender: 'system', text: '🚫 Langage inapproprié.', time: '', quality: 'bad' }
+            ]);
+            return;
+        }
+        handleLearnerActionWithType(txt, 'question');
+    };
+
+    const handleManualServiceSelect = () => {
+        toast('Veuillez passer par la bibliothèque pour choisir un cas.', { icon: '📚' });
+        router.push('/dashboard');
+    };
+
+    const handlePrescribeConfirm = (examName: string, justification: string) => {
+        // Déterminer le type d'examen
+        let actionType: 'examen_complementaire' | 'consulter_image' | 'parametres_vitaux' = 'examen_complementaire';
+        
+        const examLower = examName.toLowerCase();
+        if (examLower.includes('radio') || examLower.includes('scanner') || examLower.includes('irm') || examLower.includes('echo')) {
+            actionType = 'consulter_image';
+        } else if (examLower.includes('tension') || examLower.includes('température') || examLower.includes('saturation')) {
+            actionType = 'parametres_vitaux';
+        }
+        
+        handleLearnerActionWithType(`Examen: ${examName}. Justification: ${justification}`, actionType);
+        setIsExamModalOpen(false);
+    };
+
+    const handleQuickTool = (tool: any) => {
+        handleLearnerActionWithType(`Prise de mesure : ${tool.name}`, 'parametres_vitaux');
+    };
+
+    // Nouvelle fonction pour gérer les types d'action spécifiques
+    const handleLearnerActionWithType = async (
+        content: string,
+        actionType: 'question' | 'examen_complementaire' | 'consulter_image' | 'parametres_vitaux'
+    ) => {
+        if (!sessionId || isTyping || !caseId) return;
+
+        console.log('🎯 [LEARNER ACTION]', { actionType, content, caseId, sessionId });
+
+        const uiMsg: Message = {
+            sender: 'doctor',
+            text: content,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isAction: actionType !== 'question'
         };
+        setMessages((prev) => [...prev, uiMsg]);
+        setIsTyping(true);
 
-        setPatientData(fakePatient);
-        
-        // Reset
-        setMessages([]);
-        setQuestionsCount(0);
-        setHintsUsed(0);
-        setUserDiagnosis('');
-        setGameState('asking');
-        setFinalResult(null);
+        if (actionType === 'question') setQuestionsCount((c) => c + 1);
+
+        try {
+            let patientResponse = '';
+            let feedbackText: string | undefined;
+            let feedbackQuality: 'good' | 'warning' | 'bad' | undefined;
+
+            // === TRAITEMENT SELON LE TYPE ===
+            if (actionType === 'question') {
+                // 1. Envoyer au RAG pour obtenir la réponse du patient
+                console.log('💬 Sending question to RAG...');
+                patientResponse = await sendMessageToRAG(caseId, content);
+
+                // 2. Si mode training ou début d'évaluation, analyser la qualité
+                const shouldAnalyze = 
+                    sessionType === 'training' || 
+                    (sessionType === 'evaluation' && questionsCount < 3);
+
+                if (shouldAnalyze) {
+                    console.log('🎓 Analyzing question quality...');
+                    const analysis = await analyzeQuestionQuality(
+                        caseId,
+                        content,
+                        messages.map(m => ({
+                            sender: m.sender,
+                            text: m.text,
+                            time: m.time
+                        }))
+                    );
+
+                    feedbackText = analysis.justification;
+                    feedbackQuality = analysis.status === 'good' ? 'good' : 
+                                     analysis.status === 'warning' ? 'warning' : 'bad';
+                    
+                    console.log('✅ Analysis result:', { status: analysis.status, feedback: feedbackText });
+                }
+
+            } else {
+                // Pour les examens (imagerie, bio, constantes)
+                console.log('🔬 Requesting exam result...');
+                patientResponse = await requestExamResult(caseId, content, content);
+            }
+
+            // === AFFICHAGE DE LA RÉPONSE ===
+            const botMsg: Message = {
+                sender: 'patient',
+                text: patientResponse,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                feedback: feedbackText,
+                quality: feedbackQuality
+            };
+
+            console.log('📨 Adding bot message:', botMsg);
+            setMessages((prev) => [...prev, botMsg]);
+
+        } catch (error: any) {
+            console.error('❌ [LEARNER ACTION ERROR]', error);
+            toast.error('Erreur: ' + error.message);
+            
+            setMessages((prev) => [
+                ...prev,
+                {
+                    sender: 'system',
+                    text: `⚠️ Erreur: ${error.message}`,
+                    time: '',
+                    quality: 'bad'
+                }
+            ]);
+        } finally {
+            setIsTyping(false);
+        }
+    };
+
+    const handleNextCase = () => {
+        setSessionId(null);
+        hasInitialized.current = false;
         setShowResultModal(false);
-        
-        setCurrentView('consultation');
-        toast.success("Cas chargé !", { id: 'loadCase' });
+        router.push('/dashboard');
+    };
 
-        setMessages([{
-            sender: 'system',
-            text: "Le patient entre dans le cabinet. La consultation commence.",
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-        }]);
+    // ========== RENDU ==========
+    return (
+        <div className="min-h-screen bg-[#052648] relative font-sans text-slate-800">
+            <style jsx global>{`
+                :root {
+                    --color-primary: #052648;
+                }
+                .bg-primary {
+                    background-color: var(--color-primary);
+                }
+                .text-primary {
+                    color: var(--color-primary);
+                }
+                .animate-fade-in {
+                    animation: fadeIn 0.5s ease-out forwards;
+                }
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                    }
+                    to {
+                        opacity: 1;
+                    }
+                }
+            `}</style>
 
-    } catch (err) {
-        toast.error("Erreur chargement.", { id: 'loadCase' });
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-  // --- 2. LOGIQUE MESSAGE ---
-  const sendMessage = async () => {
-      if (!inputMessage.trim() || gameState !== 'asking' || isTyping) return;
-
-      if (checkProfanity(inputMessage)) {
-          setMessages(prev => [...prev, { sender: 'system', text: "⚠️ Langage inapproprié.", time: new Date().toLocaleTimeString(), quality: 'bad' }]);
-          setInputMessage('');
-          return;
-      }
-
-      const currentQCount = questionsCount + 1;
-      setQuestionsCount(currentQCount);
-      setIsTyping(true);
-
-      // --- PHASE A: TUTEUR (5 premiers messages) ---
-      let tutorFeedback: any = null;
-      if (currentQCount <= TUTOR_LIMIT) {
-          try {
-              console.group(`🧠 [FRONT] Analyse Tuteur (Question ${currentQCount}/${TUTOR_LIMIT})`);
-              const analysisRes = await fetch('/api/chat', {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({
-                      mode: 'analyze',
-                      userMessage: inputMessage,
-                      messages: messages,
-                      caseId: caseSequenceId
-                  })
-              });
-              const analysisData = await analysisRes.json();
-              console.log("Feedback Tuteur:", analysisData);
-              console.groupEnd();
-              
-              if(analysisData.status) {
-                  tutorFeedback = {
-                      status: analysisData.status, 
-                      justification: analysisData.justification
-                  };
-              }
-          } catch (e) {
-              console.error("Erreur Tuteur:", e);
-          }
-      }
-
-      // --- PHASE B: Affichage Message Utilisateur ---
-      const userMsg: Message = {
-          sender: 'doctor',
-          text: inputMessage,
-          time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-          quality: tutorFeedback?.status === 'warning' ? 'bad' : 'good', 
-          feedback: tutorFeedback?.justification
-      };
-      
-      setMessages(prev => [...prev, userMsg]);
-      const tempInput = inputMessage; 
-      setInputMessage('');
-
-      // --- PHASE C: Appel RAG Patient ---
-      try {
-          console.groupCollapsed(`🗣️ [FRONT] Envoi RAG Patient - Case ${caseSequenceId}`);
-          
-          const chatRes = await fetch('/api/chat', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({
-                  mode: 'chat',
-                  userMessage: tempInput,
-                  messages: messages, 
-                  caseId: caseSequenceId,
-                  learnerId: user?.id
-              })
-          });
-          
-          const chatData = await chatRes.json();
-          console.log("📩 [FRONT] Réponse Brute:", chatData);
-          console.groupEnd();
-
-          // CORRECTION CRITIQUE ICI : Gestion polyvalente des clés de réponse
-          // Le backend peut renvoyer 'response' ou 'content' selon l'endpoint
-          const patientText = chatData.response || chatData.content || chatData.answer || "(Le patient reste silencieux...)";
-
-          setMessages(prev => [...prev, {
-              sender: 'patient',
-              text: patientText,
-              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
-          }]);
-
-          // Mise à jour info patient si le backend les renvoie (optionnel mais utile pour 'role', 'nom' etc)
-          if(chatData.case_title && patientData?.nom === "Patient (Chargement...)") {
-             setPatientData(prev => ({ ...prev!, nom: "Patient " + caseSequenceId }));
-          }
-
-      } catch (err) {
-          console.error("Erreur Chat:", err);
-          toast.error("Problème de connexion avec le patient.");
-          setMessages(prev => [...prev, { sender: 'system', text: "Erreur technique : Le patient ne répond pas.", time: "" }]);
-      } finally {
-          setIsTyping(false);
-          
-          // Phase Check
-          if (currentQCount === TUTOR_LIMIT) {
-              setTimeout(() => {
-                  toast('Fin du tutorat. Mode autonomie.', { icon: '🎓' });
-                  setMessages(prev => [...prev, {
-                      sender: 'system',
-                      text: "🎓 FIN DE LA PHASE TUTORÉE. Vous continuez en autonomie.",
-                      time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
-                  }]);
-              }, 1200);
-          }
-          
-          if (currentQCount >= MAX_QUESTIONS) {
-              setGameState('diagnosing');
-              toast("Consultation terminée. Diagnostic requis.", { icon: '🛑' });
-          }
-      }
-  };
-
-  // --- 3. INDICE ---
-  const requestHint = async () => {
-      if (hintsUsed >= MAX_HINTS) return toast.error("Plus d'indices disponibles.");
-      const tid = toast.loading("Le tuteur réfléchit...");
-      
-      try {
-          const res = await fetch('/api/chat', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  mode: 'hint',
-                  caseId: caseSequenceId,
-                  learnerId: user?.id,
-                  messages: messages
-              })
-          });
-          const data = await res.json();
-          
-          setMessages(prev => [...prev, {
-              sender: 'tutor',
-              text: data.content,
-              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-              icon: Lightbulb
-          }]);
-          setHintsUsed(h => h + 1);
-          toast.success("Indice reçu", { id: tid });
-      } catch (e) {
-          toast.error("Indice indisponible", { id: tid });
-      }
-  };
-
-  // --- 4. EXAMENS ---
-  const handlePrescribeExam = async (examName: string, reason: string) => {
-      const tid = toast.loading(`Analyse ${examName}...`);
-      setIsExamModalOpen(false); // On ferme avant
-
-      try {
-          const res = await fetch('/api/chat', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({
-                  mode: 'exam',
-                  caseId: caseSequenceId,
-                  examName: examName,
-                  examReason: reason
-              })
-          });
-          const data = await res.json();
-
-          setMessages(prev => [...prev, {
-              sender: 'system',
-              text: `📄 RÉSULTAT ${data.exam_name || examName}: ${data.resultat}`,
-              time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-              isAction: true
-          }]);
-          
-          toast.success("Résultat reçu", { id: tid });
-      } catch (e) {
-          toast.error("Erreur Labo", { id: tid });
-      }
-  };
-
-    // Wrapper simple pour la barre d'outils rapides (Thermometre, etc)
-  const handleQuickTool = (tool: any) => {
-      // On déclenche un examen "rapide" sans passer par la modale justification
-      handlePrescribeExam(tool.name, "Prise de constante (Monitoring)");
-  };
-
-  // --- 5. SUBMISSION ---
-  const handleFinalPrescription = async (medication: string, dosage: string) => {
-      const loadingId = toast.loading("Correction IA...");
-      setIsDrugModalOpen(false);
-
-      try {
-           const payload = {
-              mode: 'grade',
-              learnerId: user?.id,
-              caseId: caseSequenceId,
-              messages: messages, 
-              userDiagnosis: userDiagnosis,
-              userPrescription: `${medication} ${dosage}`
-           };
-
-           const res = await fetch('/api/chat', {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify(payload)
-           });
-
-           const result: GameResult = await res.json();
-           const penalty = hintsUsed * 1; 
-           result.score = Math.max(0, result.score - penalty);
-
-           setFinalResult(result);
-           setGameState('finished');
-           setShowResultModal(true);
-           toast.success(`Terminé! Note : ${result.score}/20`, { id: loadingId });
-
-      } catch (err) {
-          console.error(err);
-          toast.error("Erreur notation.", { id: loadingId });
-      }
-  };
-
-  // --- 6. NAVIGATION CAS SUIVANT ---
-  const handleNextCase = () => {
-      const nextId = caseSequenceId + 1;
-      setCaseSequenceId(nextId);
-      if (selectedService) {
-          handleServiceSelect(selectedService); // Relance le flow complet
-      }
-  };
-
-  const checkProfanity = (txt: string) => PROFANITY_LIST.some(bw => txt.toLowerCase().includes(bw));
-  const tools = [
-      { name: 'Température', icon: Thermometer },
-      { name: 'Tension', icon: Gauge },
-      { name: 'SpO2', icon: Wind }
-  ];
-
-  const handleToolClick = (tool: any) => handlePrescribeExam(tool.name, "Prise de constante standard");
-  return (
-    <div className="min-h-screen bg-[#052648] relative font-sans text-slate-800">
-    <style jsx global>{`
-        :root { --color-primary: #052648; --color-primary-dark: #031a31; }
-        .bg-primary { background-color: var(--color-primary); }
-        .text-primary { color: var(--color-primary); }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
-      `}</style>
-
-      <main className="flex-1 h-[calc(100vh-80px)] flex items-center justify-center p-4">
-        {isLoading && <div className="text-white animate-pulse">Initialisation du patient...</div>}
-
-        {!isLoading && (
-            <>
-                {currentView === 'home' && (
-                     <HomeView 
-                        difficulty="Débutant" 
-                        onDifficultyChange={() => {}} 
-                        onServiceSelect={handleServiceSelect} 
-                        onRandomCase={() => handleServiceSelect(services[0])} 
-                     />
+            <main className="flex-1 h-[calc(100vh-0px)] flex items-center justify-center p-4">
+                {currentView === 'loading' && (
+                    <div className="flex flex-col items-center animate-pulse text-white">
+                        <div className="w-16 h-16 border-4 border-white/20 border-t-emerald-400 rounded-full animate-spin mb-6"></div>
+                        <span className="font-light text-xl tracking-wide">
+                            Chargement du Patient...
+                        </span>
+                    </div>
                 )}
 
-                {/* NOTE: PatientInfoView est sauté dans ce flux pour aller vite, mais on pourrait l'ajouter */}
+                {currentView === 'home' && (
+                    <HomeView
+                        difficulty="Débutant"
+                        onDifficultyChange={() => {}}
+                        onServiceSelect={handleManualServiceSelect}
+                        onRandomCase={() => router.push('/dashboard')}
+                    />
+                )}
 
-                {currentView === 'consultation' && selectedService && (
+                {currentView === 'consultation' && selectedService && patientData && (
                     <ConsultationView
-                        patientData={patientData!} // Fake data initially
+                        patientData={patientData}
                         selectedService={selectedService}
                         messages={messages}
                         inputMessage={inputMessage}
                         onInputChange={setInputMessage}
-                        onSendMessage={sendMessage}
+                        onSendMessage={() => {
+                            handleChatSubmit(inputMessage);
+                            setInputMessage('');
+                        }}
+                        isTyping={isTyping}
+                        gameState={gameState}
                         messageCount={questionsCount}
-                        MAX_QUESTIONS={MAX_QUESTIONS}
-                        diagnosticTools={tools as any}
-                        clinicalExams={exampleExams} 
-                        
-                        // Exams Logic
+                        MAX_QUESTIONS={maxQuestions}
+                        remainingHints={maxHints - hintsUsed}
+                        onRequestHint={requestHint}
+                        clinicalExams={exampleExams}
+                        diagnosticTools={[
+                            { name: 'Température', icon: Thermometer },
+                            { name: 'Tension', icon: Gauge },
+                            { name: 'SpO2', icon: Wind }
+                        ]}
+                        onToolClick={handleQuickTool}
                         isExamModalOpen={isExamModalOpen}
                         selectedExam={selectedExam}
-                        onExamClick={(ex) => { setSelectedExam(ex); setIsExamModalOpen(true); }}
+                        onExamClick={(exam) => {
+                            setSelectedExam(exam);
+                            setIsExamModalOpen(true);
+                        }}
                         onCloseExamModal={() => setIsExamModalOpen(false)}
-                        onPrescribeExam={(exam) => handlePrescribeExam(exam.name, "Examen standard")}
-                        
-                        // Game Logic
-                        isGameOver={gameState === 'finished'}
-                        gameState={gameState}
-                        onReset={handleNextCase} 
-                        
-                        // Hints
-                        remainingHints={MAX_HINTS - hintsUsed}
-                        onRequestHint={requestHint}
-                        
-                        // Diagnosis
+                        onPrescribeExam={(exam) => setSelectedExam(exam)}
+                        onPrescribe={handlePrescribeConfirm}
                         userDiagnosis={userDiagnosis}
                         setUserDiagnosis={setUserDiagnosis}
                         onTriggerDiagnosis={() => setGameState('diagnosing')}
                         onConfirmDiagnosis={() => {
-                            if(!userDiagnosis.trim()) return toast.error("Diagnostic requis.");
+                            if (!userDiagnosis.trim()) return toast.error('Le diagnostic est vide.');
                             setGameState('treating');
                             setIsDrugModalOpen(true);
                         }}
-                        
-                        // Drugs
                         isDrugModalOpen={isDrugModalOpen}
                         onOpenDrugModal={() => setIsDrugModalOpen(true)}
                         onCloseDrugModal={() => setIsDrugModalOpen(false)}
-                        onFinalPrescription={handleFinalPrescription}
-                        isTyping={isTyping}
-                        onToolClick={handleQuickTool}
+                        onFinalPrescription={(med, dose) => submitFinal(`${med} ${dose}`)}
+                        isGameOver={gameState === 'finished'}
+                        onReset={() => router.push('/dashboard')}
                     />
                 )}
-            </>
-        )}
-      </main>
-      
-      {/* --- RESULT MODAL RESPONSIVE --- */}
-      {showResultModal && finalResult && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
-               <div className="bg-white rounded-2xl w-full max-w-lg md:max-w-2xl lg:max-w-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
-                   
-                   <div className={`h-2 w-full flex-shrink-0 ${finalResult.score >= 10 ? 'bg-green-500' : 'bg-red-500'}`} />
-                   
-                   <div className="p-6 md:p-8 overflow-y-auto">
-                       <div className="text-center mb-8">
-                           <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full border-4 mb-4 ${
-                               finalResult.score >= 10 ? 'border-green-100 bg-green-50 text-green-600' : 'border-red-100 bg-red-50 text-red-600'
-                           }`}>
-                               <span className="text-4xl font-bold">{finalResult.score}</span>
-                               <span className="text-xs text-gray-500 mt-1 ml-1">/20</span>
-                           </div>
-                           <h2 className="text-2xl font-bold text-gray-800">
-                               {finalResult.score >= 10 ? "Stage Validé !" : "Stage Non Validé"}
-                           </h2>
-                       </div>
+            </main>
 
-                       <div className="grid md:grid-cols-2 gap-6 text-left">
-                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                               <p className="text-xs text-slate-500 uppercase font-bold mb-2">Analyse du Professeur</p>
-                               <p className="text-sm text-slate-700 leading-relaxed italic">"{finalResult.feedback}"</p>
-                           </div>
-                           
-                           {finalResult.missedSteps && finalResult.missedSteps.length > 0 && (
-                               <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
-                                   <p className="text-xs text-amber-700 uppercase font-bold mb-2">Points manqués</p>
-                                   <ul className="text-sm text-amber-800 space-y-1 list-disc pl-4">
-                                       {finalResult.missedSteps.map((step, i) => <li key={i}>{step}</li>)}
-                                   </ul>
-                               </div>
-                           )}
-                       </div>
-                   </div>
+            {showResultModal && finalResult && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
+                        <div
+                            className={`h-3 w-full ${
+                                finalResult.score >= 12 ? 'bg-emerald-500' : 'bg-red-500'
+                            }`}
+                        />
 
-                   <div className="p-6 border-t bg-gray-50 flex flex-col sm:flex-row gap-4 justify-between items-center">
-                       <button onClick={() => {setShowResultModal(false); setCurrentView('home');}} className="text-slate-500 hover:text-primary font-medium text-sm">
-                           Retour au menu
-                       </button>
-                       <button onClick={handleNextCase} 
-                           className="w-full sm:w-auto px-8 py-3 bg-[#052648] text-white font-bold rounded-xl hover:bg-[#0a4d8f] transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl">
-                           <RefreshCcw size={18} />
-                           Cas Suivant (N°{caseSequenceId + 1})
-                       </button>
-                   </div>
-               </div>
-           </div>
-      )}
-    </div>
-  );
+                        <div className="p-8 overflow-y-auto">
+                            <div className="text-center mb-8">
+                                <div
+                                    className={`inline-flex items-center justify-center w-28 h-28 rounded-full border-8 mb-4 ${
+                                        finalResult.score >= 12
+                                            ? 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                                            : 'border-red-100 bg-red-50 text-red-600'
+                                    }`}
+                                >
+                                    <div className="flex flex-col items-center">
+                                        <span className="text-5xl font-extrabold">
+                                            {finalResult.score}
+                                        </span>
+                                        <span className="text-xs text-gray-400 font-bold uppercase mt-1">
+                                            / 20
+                                        </span>
+                                    </div>
+                                </div>
+                                <h2 className="text-3xl font-bold text-gray-800">
+                                    {finalResult.score >= 12 ? 'Session Validée' : 'Session Échouée'}
+                                </h2>
+                                <p className="text-slate-500 text-sm mt-1">Évaluation Automatique</p>
+                            </div>
+
+                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 text-left mb-6">
+                                <p className="text-xs text-slate-500 uppercase font-bold mb-2">
+                                    Feedback Tuteur
+                                </p>
+                                <p className="text-sm text-slate-800 leading-relaxed italic">
+                                    {finalResult.feedback_global}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t bg-slate-100 flex justify-between items-center shrink-0">
+                            <button
+                                onClick={() => router.push('/dashboard')}
+                                className="text-slate-500 hover:text-primary font-bold text-sm"
+                            >
+                                Menu
+                            </button>
+                            <button
+                                onClick={handleNextCase}
+                                className="bg-[#052648] hover:bg-blue-900 text-white px-8 py-3 rounded-xl font-bold shadow-lg"
+                            >
+                                Continuer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default SimulationContent;

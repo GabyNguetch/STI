@@ -47,24 +47,6 @@ export interface DonneesParacliniques {
   imagerie?: Record<string, any>;
 }
 
-// Schema de Création (Payload POST)
-export interface BackendClinicalCaseCreate {
-  code_fultang: string; // Obligatoire: Identifiant unique
-  pathologie_principale_id: number;
-  
-  // Champs JSONB dans Postgres
-  presentation_clinique: PresentationClinique;
-  donnees_paracliniques?: DonneesParacliniques;
-  
-  medicaments_prescrits?: Array<any>; // JSON
-  competences_requises?: Record<string, any>; // Lien Q-Matrix
-  
-  // Relations Tableaux
-  pathologies_secondaires_ids?: number[];
-  images_associees_ids?: number[];
-  
-  niveau_difficulte?: number; // 1-100 ou 1-5
-}
 
 // Schema de Réponse (Ce qu'on reçoit du GET)
 export interface BackendClinicalCase extends BackendClinicalCaseCreate {
@@ -129,3 +111,124 @@ export interface TreatmentForSymptom {
 
 // Pour la création/update
 export type BackendSymptomCreate = Omit<BackendSymptom, 'id' | 'created_at' | 'updated_at'>;
+
+// types/backend/index.ts (Ajouter ou mettre à jour)
+
+export interface BackendMedication {
+    id: number;
+    dci: string; // Dénomination Commune Internationale
+    nom_commercial: string;
+    classe_therapeutique: string;
+    forme_galenique: string;
+    dosage: string;
+    voie_administration: string;
+    mecanisme_action?: string;
+    // Les champs JSONB : on les type en Record<string, any> ou any pour la flexibilité
+    indications?: Record<string, any> | string; 
+    contre_indications?: Record<string, any> | string;
+    effets_secondaires?: Record<string, any> | string;
+    interactions_medicamenteuses?: Record<string, any> | string;
+    precautions_emploi?: string;
+    posologie_standard?: Record<string, any> | string;
+    disponibilite_cameroun?: string;
+    cout_moyen_fcfa?: number;
+    statut_prescription?: string; // ex: "Ordonnance simple", "Stupéfiant"
+    created_at?: string;
+    updated_at?: string;
+}
+
+export type BackendMedicationCreate = Omit<BackendMedication, 'id' | 'created_at' | 'updated_at'>;
+
+// types/backend/index.ts
+
+export interface BackendDisease {
+  id: number;
+  nom_fr: string;
+  code_icd10: string;
+  nom_en?: string;
+  nom_local?: string;
+  categorie?: string; // ex: Cardiologie
+  prevalence_cameroun?: string | number; // "0.5%" ou "Fréquent"
+  niveau_gravite?: number; // 1 à 5
+  description?: string;
+  physiopathologie?: string;
+  
+  // Champs JSON pour futures extensions
+  complications?: Record<string, any> | string;
+  facteurs_risque?: Record<string, any> | string;
+  
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type BackendDiseaseCreate = Omit<BackendDisease, 'id' | 'created_at' | 'updated_at'>;
+
+
+// types/backend/index.ts
+
+// ... (autres interfaces)
+
+export interface BackendImage {
+    id: number;
+    // Métadonnées médicales
+    type_examen: string; // "Radio", "Scanner", "IRM", "Echographie"
+    sous_type?: string;  // "Thorax", "Genou"
+    pathologie_id?: number;
+    description?: string;
+    
+    // Analyses
+    signes_radiologiques?: Record<string, any> | string; // JSONB
+    annotations?: any[]; // JSONB
+    interpretation_experte?: string;
+    diagnostic_differentiel?: string[]; // Array
+    
+    // Validation
+    niveau_difficulte: number; // 1-5
+    qualite_image: number; // 1-5
+    valide_expert: boolean;
+    expert_validateur?: string;
+    date_validation?: string;
+    
+    // Technique
+    fichier_url: string;
+    fichier_miniature_url?: string; // Optional si le backend le génère
+    format_image: string; // "jpg", "dicom"
+    taille_ko: number;
+    resolution?: string; // "1920x1080"
+    created_at: string;
+}
+
+// Pour l'envoi (FormData gère le fichier, mais on type les champs textes ici)
+export interface ImageMetadata {
+    type_examen: string;
+    sous_type?: string;
+    pathologie_id?: number;
+    description?: string;
+    niveau_difficulte: number;
+    qualite_image: number;
+}
+
+export interface BackendClinicalCaseCreate {
+  code_fultang: string;
+  pathologie_principale_id: number;
+  pathologies_secondaires_ids: number[];
+  presentation_clinique: {
+    histoire_maladie: string;
+    symptomes_patient: Array<{ symptome_id: number; details: string }>;
+    antecedents: Record<string, any>;
+  };
+  donnees_paracliniques: Record<string, any>;
+  evolution_patient: string;
+  images_associees_ids: number[];
+  sons_associes_ids: number[];
+  medicaments_prescrits: any[]; 
+  niveau_difficulte: number;
+  duree_estimee_resolution_min: number;
+  objectifs_apprentissage: string[];
+  competences_requises: Record<string, any>;
+}
+
+
+
+
+

@@ -1,144 +1,148 @@
-// components/dashboard/Sidebar.tsx
 'use client';
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Milestone, Calendar, Settings, LogOut, Activity, Stethoscope, ChevronRight, HeartPulse, BookPlus } from 'lucide-react';
-import { useRouter } from 'next/navigation'; 
-import toast from 'react-hot-toast'; 
-import { useAuth } from '@/contexts/AuthContext'; 
-import type { NavItem } from '@/types/dashboard/dashboard';
-
-const PRIMARY_COLOR = '#052648';
-
-// CORRECTION : On type explicitement ce tableau avec 'NavItem[]' 
-// pour que 'id' soit reconnu comme 'overview' | 'journey' ... et non pas string.
-const navItems: NavItem[] = [
-  { id: 'overview', label: "Vue d'ensemble", icon: LayoutDashboard },
-  { id: 'journey', label: 'Parcours', icon: Milestone },
-  { id: 'lib', label: 'Bibliothèque', icon: BookPlus },
-  { id: 'redo', label: 'Échéances', icon: Calendar },
-  { id: 'settings', label: 'Paramètres', icon: Settings },
-];
+import { 
+  LayoutDashboard, 
+  Stethoscope, 
+  Target,           // Pour Objectifs
+  Brain,            // Pour Compétences
+  TrendingUp,       // Pour Parcours/Traces
+  ScanFace,         // Pour Profil Cognitif/Analyse
+  LogOut, 
+  HeartPulse, 
+  ChevronRight 
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
-  activeTab: NavItem['id'];
-  setActiveTab: (tab: NavItem['id']) => void;
+  onNavigate: (view: string) => void;
+  activeView: string;
 }
 
-// --- Composant Principal ---
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const router = useRouter();
-  
-  const { profile, signOut: handleSignOut } = useAuth();
-    const onLogoutClick = async () => {
-    toast.loading('Déconnexion en cours...');
-    await handleSignOut();
-    toast.dismiss();
-    router.push('/');
-  };
+const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const { logout } = useAuth();
+
+  // --- CONFIGURATION DES 6 ONGLETS ---
+  const menuItems = [
+    { 
+      id: 'overview', 
+      label: "Vue d'Ensemble", 
+      icon: LayoutDashboard 
+    },
+    { 
+      id: 'competencies', 
+      label: 'Compétences', 
+      icon: Brain 
+    },
+    { 
+      id: 'goals', 
+      label: 'Objectifs', 
+      icon: Target 
+    },
+    { 
+      id: 'journey', 
+      label: 'Mon parcours', 
+      icon: TrendingUp 
+    },
+    { 
+      id: 'practice', 
+      label: "M'exercer", 
+      icon: Stethoscope 
+    },
+    { 
+      id: 'analytic_profile', // Nommé ainsi pour différencier du "Setting Profile"
+      label: 'Mon profil', 
+      icon: ScanFace 
+    },
+  ];
 
   return (
-    <aside 
-      className="w-72 flex-shrink-0 flex flex-col h-screen text-white relative"
-      style={{ 
-        background: `linear-gradient(180deg, ${PRIMARY_COLOR} 0%, #063a5f 100%)`
-      }}
-    >
-      {/* Overlay pattern subtil */}
+    <>
+      {/* DESKTOP SIDEBAR */}
       <div 
-        className="absolute inset-0 opacity-5"
-        style={{
-          backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`,
-          backgroundSize: '40px 40px'
-        }}
-      />
-
-      <div className="relative z-10 flex flex-col h-full p-6">
-        {/* Logo / Titre avec animation */}
-        <div className="flex items-center gap-4 mb-12 group">
-          <div className="relative">
-            <div className="absolute inset-0 bg-blue-400 rounded-xl blur-md opacity-50 group-hover:opacity-75 transition-opacity duration-300" />
-            <div className="relative bg-gradient-to-br from-blue-400 to-blue-600 p-3 rounded-xl shadow-lg">
-              <HeartPulse size={28} className="text-white" strokeWidth={2.5} />
+        className={`
+          hidden md:flex flex-col fixed left-0 top-0 h-full bg-white z-50 
+          shadow-[4px_0_24px_rgba(0,0,0,0.04)] border-r border-slate-100
+          transition-all duration-500 ease-cubic-bezier
+          ${isHovered ? 'w-72' : 'w-28'}
+        `}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* LOGO */}
+        <div className="h-24 flex items-center justify-center relative w-full mb-6">
+          <div className={`flex items-center gap-3 transition-all duration-500 ${isHovered ? 'opacity-100 translate-x-0' : ''}`}>
+            <div className={`
+                w-12 h-12 bg-gradient-to-br from-[#052648] to-[#2c3d98] rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20
+                text-white transition-all duration-500 z-10
+                ${isHovered ? 'mr-0' : 'scale-90'}
+            `}>
+                <HeartPulse size={26} strokeWidth={2.5} />
             </div>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">The Good Doctor</h1>
+
+            <div className={`flex flex-col whitespace-nowrap overflow-hidden transition-all duration-500 ease-in-out ${isHovered ? 'w-auto opacity-100 ml-2' : 'w-0 opacity-0 ml-0'}`}>
+               <span className="text-xl font-extrabold text-[#052648] tracking-tight">FullTang</span>
+               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Student</span>
+            </div>
           </div>
         </div>
 
-        {/* Navigation Principale */}
-        <nav className="flex-grow space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            
+        {/* NAVIGATION */}
+        <nav className="flex-1 flex flex-col space-y-2 py-4 w-full overflow-y-auto no-scrollbar">
+          {menuItems.map((item) => {
+            const isActive = activeView === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => onNavigate(item.id)}
                 className={`
-                  w-full flex items-center justify-between gap-4 px-4 py-3.5 rounded-xl
-                  text-left transition-all duration-300 group relative overflow-hidden
-                  ${isActive 
-                    ? 'bg-white/10 shadow-lg backdrop-blur-sm' 
-                    : 'hover:bg-white/5 hover:translate-x-1'
-                  }
+                  relative h-14 flex items-center cursor-pointer group outline-none
+                  transition-all duration-300 w-[92%] rounded-r-full
+                  ${isActive ? 'bg-blue-50/80 text-[#052648]' : 'bg-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'}
                 `}
               >
-                {/* Barre indicatrice pour l'élément actif */}
-                {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-blue-400 to-blue-600 rounded-r-full" />
-                )}
-                
-                <div className="flex items-center gap-4">
-                  <div className={`
-                    p-2 rounded-lg transition-all duration-300
-                    ${isActive 
-                      ? 'bg-blue-500/20 text-blue-300' 
-                      : 'bg-white/5 text-blue-300 group-hover:bg-white/10'
-                    }
-                  `}>
-                    <Icon size={20} strokeWidth={2.5} />
-                  </div>
-                  <span className={`
-                    font-medium transition-colors duration-300
-                    ${isActive ? 'text-white' : 'text-blue-200'}
-                  `}>
-                    {item.label}
-                  </span>
+                {isActive && <div className="absolute left-0 h-full w-1.5 bg-[#052648] rounded-r-md shadow-blue-500/50" />}
+
+                <div className="w-24 min-w-[6rem] flex items-center justify-center z-10">
+                   <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
                 </div>
+
+                <span className={`text-sm font-bold whitespace-nowrap overflow-hidden transition-all duration-500 ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-5'} ${isActive ? 'font-extrabold' : 'font-medium'}`}>
+                   {item.label}
+                </span>
                 
-                <ChevronRight 
-                  size={18} 
-                  className={`
-                    transition-all duration-300
-                    ${isActive 
-                      ? 'opacity-100 translate-x-0 text-blue-300' 
-                      : 'opacity-0 -translate-x-2 group-hover:opacity-50 group-hover:translate-x-0 text-blue-400'
-                    }
-                  `}
-                />
+                {isActive && isHovered && <ChevronRight size={16} className="absolute right-4 text-blue-300 animate-pulse" />}
               </button>
             );
           })}
         </nav>
 
-        {/* Section Déconnexion */}
-        <button 
-          onClick={onLogoutClick} // AJOUT du handler ici
-          className="
-          w-full flex items-center gap-4 px-4 py-3.5 rounded-xl
-          text-blue-200 hover:bg-red-500/20 hover:text-white
-          transition-all duration-300 group border border-transparent hover:border-red-500/30
-        ">
-          <div className="p-2 rounded-lg bg-white/5 group-hover:bg-red-500/20 transition-all duration-300">
-            <LogOut size={20} strokeWidth={2.5} />
-          </div>
-          <span className="font-medium">Déconnexion</span>
-        </button>
+        {/* FOOTER */}
+        <div className="p-4 mb-4">
+           <button onClick={logout} className={`w-full h-14 rounded-r-full flex items-center transition-all duration-300 group text-rose-500/80 hover:bg-rose-50 hover:text-rose-600 ${!isHovered ? 'w-16 rounded-2xl justify-center' : ''}`}>
+              <div className={`${isHovered ? 'w-24 flex justify-center' : ''}`}>
+                  <LogOut size={24} className="group-hover:-translate-x-1 transition-transform" />
+              </div>
+              <span className={`text-sm font-bold overflow-hidden transition-all duration-300 ${isHovered ? 'w-auto opacity-100' : 'w-0 opacity-0'}`}>Déconnexion</span>
+           </button>
+        </div>
       </div>
-    </aside>
+
+      {/* MOBILE NAV */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-50 px-2 py-2 flex justify-between items-center shadow-[0_-5px_20px_rgba(0,0,0,0.03)] safe-area-bottom pb-4 overflow-x-auto">
+         {menuItems.map((item) => {
+             const isActive = activeView === item.id;
+             return (
+               <button key={item.id} onClick={() => onNavigate(item.id)} className="relative flex flex-col items-center justify-center p-2 min-w-[3.5rem] transition-all duration-300">
+                  {isActive && <div className="absolute top-1 w-10 h-10 bg-[#052648] rounded-xl shadow-lg shadow-blue-900/30 animate-in zoom-in-95 duration-200"></div>}
+                  <item.icon size={22} className={`relative z-10 transition-colors duration-200 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+               </button>
+             );
+         })}
+      </div>
+    </>
   );
 };
+
 export default Sidebar;
