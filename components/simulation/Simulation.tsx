@@ -6,26 +6,24 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Thermometer, Gauge, Wind, ClipboardCheck } from 'lucide-react';
 
-// Composants & Contextes
 import FunFactLoader from '@/components/common/FunFactLoader';
 import ConsultationView from '@/components/simulation/ConsultationView';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Types & Constantes
 import { services, exampleExams } from '@/types/simulation/constant';
 import { Patient, Service, Message, GameState, ClinicalExam } from '@/types/simulation/types';
 
-// Services
 import { 
     startSimulationSession, 
     sendSimulationAction, 
     requestSimulationHint, 
     submitSimulationDiagnosis,
     getSessionMessages,
+    sendChatMessage,
     StartSessionResponse,
     SubmitResponse,
     ActionRequest,
-    TutorFeedback
+    SimulationMessage
 } from '@/services/SimulationService';
 
 // ==========================================
@@ -151,17 +149,24 @@ export default function SimulationContent() {
         try {
             setCurrentView('loading');
 
+            console.log('📤 [API REQUEST] POST /api/v1/simulation/sessions/start');
+            console.log('📦 Payload:', JSON.stringify({ learner_id: user.id, category, force_mode: mode }, null, 2));
+
             const data: StartSessionResponse = await startSimulationSession(user.id, null, category, mode);
+            
+            console.log('✅ [API RESPONSE] Session créée');
+            console.log('📥 Response:', JSON.stringify(data, null, 2));
             
             setSessionId(data.session_id);
             setSessionMode(mode);
             
+            // Configuration selon le mode
             if (mode === 'diagnostic') {
                 setMaxInteractions(5);
-                setHintsRemaining(999);
+                setHintsRemaining(999); // Infini
             } else {
                 setMaxInteractions(10);
-                setHintsRemaining(5);
+                setHintsRemaining(5); // Limité
             }
 
             const safePatient = mapBackendToPatient(data);
@@ -174,15 +179,15 @@ export default function SimulationContent() {
 
             setMessages([{
                 sender: 'system',
-                text: `Début de la simulation (${mode}). ${mode === 'diagnostic' ? '5 questions' : '10 questions'}. Les examens ne comptent pas.`,
+                text: `🎯 Session ${mode === 'diagnostic' ? 'Évaluation Diagnostique' : mode === 'training' ? 'Entraînement' : 'Évaluation'} démarrée.\n📊 ${mode === 'diagnostic' ? '5' : '10'} questions autorisées.\n💡 ${mode === 'diagnostic' ? 'Indices illimités' : '5 indices disponibles'}.`,
                 time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
             }]);
 
             setCurrentView('consultation');
-            toast.success(`Dossier patient ouvert`, { icon: '📂' });
+            toast.success(`Dossier patient ouvert - Mode ${mode}`, { icon: '📂' });
 
         } catch (error: any) {
-            console.error("Critical Init Error:", error);
+            console.error("❌ Critical Init Error:", error);
             toast.error("Impossible de charger le patient. Retour au dashboard.");
             setTimeout(() => router.push('/dashboard'), 2000);
         } finally {
@@ -206,105 +211,132 @@ export default function SimulationContent() {
         const currentMsg = inputMessage;
         setInputMessage("");
         setIsThinking(true);
-        setInteractionsCount(prev => prev + 1);
 
-        // Message du docteur
+        // Message du docteur (UI immédiat)
         setMessages(prev => [...prev, {
             sender: 'doctor',
             text: currentMsg,
             time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
         }]);
 
+        // Incrémenter le compteur
+        const newCount = interactionsCount + 1;
+        setInteractionsCount(newCount);
+
         try {
-            console.time("ChatTurn");
+            console.group(`💬 [CHAT ${newCount}/${maxInteractions}] Message Apprenant`);
+            console.log(`📤 Question: "${currentMsg}"`);
+            console.log(`🔗 Session: ${sessionId}`);
+            console.log(`⏰ ${new Date().toISOString()}`);
             
-            const action: ActionRequest = {
-                action_type: 'question',
-                action_name: 'Dialogue',
-                content: currentMsg
+            const chatStart = performance.now();
+            
+            // ENVOI DU MESSAGE VIA L'ENDPOINT CHAT
+            console.log(`🚀 [API REQUEST] POST /api/v1/chat/sessions/${sessionId}/messages`);
+            const payload = {
+                sender: "learner",
+                content: currentMsg,
+                message_metadata: {}
             };
+            console.log('📦 Payload:', JSON.stringify(payload, null, 2));
 
-            // Envoi de l'action
-            await sendSimulationAction(sessionId, action);
+            await sendChatMessage(sessionId, payload);
 
-            // CORRECTION: Récupération des 3 derniers messages pour être sûr
+            console.log(`✅ Message envoyé (${(performance.now() - chatStart).toFixed(2)}ms)`);
+
+            // RÉCUPÉRATION DES 3 DERNIERS MESSAGES POUR AVOIR LA RÉPONSE
+            console.log(`📥 [API REQUEST] GET /api/v1/chat/sessions/${sessionId}/messages?limit=3`);
+            
+            const fetchStart = performance.now();
             const recentMessages = await getSessionMessages(sessionId, 3);
             
-            console.log("📨 Messages récupérés:", recentMessages);
+            console.log(`✅ Messages récupérés (${(performance.now() - fetchStart).toFixed(2)}ms)`);
+            console.log(`📨 Nombre: ${recentMessages.length}`);
+            console.log(`📄 [API RESPONSE] Messages:`, JSON.stringify(recentMessages, null, 2));
 
-            // Chercher le dernier message du patient (peut être 'Patient' ou 'patient')
+            // CHERCHER LE DERNIER MESSAGE DU PATIENT
             const patientMsg = recentMessages
-                .reverse() // Inverser pour avoir le plus récent en premier
-                .find((m: any) => 
+                .reverse()
+                .find((m: SimulationMessage) => 
                     m.sender?.toLowerCase() === 'patient'
                 );
-
-            console.timeEnd("ChatTurn");
 
             if (patientMsg) {
                 const responseText = patientMsg.content || "...";
                 const feedbackData = patientMsg.message_metadata?.tutor_feedback;
 
-                console.log("🤖 Réponse patient:", responseText);
-                console.log("🎓 Feedback tuteur brut:", feedbackData);
+                console.log(`🤖 Message Patient trouvé:`);
+                console.log(`   📝 Contenu: "${responseText}"`);
+                console.log(`   🎓 Tutor Feedback:`, JSON.stringify(feedbackData, null, 2));
 
-                // CORRECTION: Créer le message avec le feedback au bon format
                 const newPatientMessage: Message = {
                     sender: 'patient',
                     text: responseText,
                     time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'}),
-                    feedback: feedbackData // Garder l'objet directement, pas en JSON string
+                    feedback: feedbackData // Objet direct
                 };
 
-                console.log("💾 Message patient formaté:", newPatientMessage);
-
                 setMessages(prev => [...prev, newPatientMessage]);
+
+                console.log(`✅ Message ajouté à l'interface`);
             } else {
-                console.warn("⚠️ Aucun message patient trouvé dans la réponse");
+                console.warn(`⚠️ Aucun message patient trouvé`);
+                console.log(`Senders reçus:`, recentMessages.map((m: any) => m.sender));
+                
+                setMessages(prev => [...prev, {
+                    sender: 'system',
+                    text: "⚠️ Le patient semble absent. Vérifiez la connexion.",
+                    time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
+                }]);
             }
 
-            if (interactionsCount + 1 >= maxInteractions) {
+            const totalTime = (performance.now() - chatStart).toFixed(2);
+            console.log(`⏱️ Tour complet: ${totalTime}ms`);
+            console.groupEnd();
+
+            // Vérifier si limite atteinte
+            if (newCount >= maxInteractions) {
                 setTimeout(() => {
-                    toast('Dernière interaction effectuée !', { icon: '⚠️' });
+                    console.log(`🏁 Limite atteinte (${newCount}/${maxInteractions})`);
+                    toast('Dernière question effectuée ! Formulez votre diagnostic.', { icon: '⚠️' });
                     setGameState('diagnosing');
                 }, 1500);
             }
 
         } catch (error) {
-            console.error('❌ Chat error:', error);
-            toast.error("Le patient ne répond pas...");
+            console.error('❌ ERREUR CHAT:', error);
+            console.log(`Session: ${sessionId}, Message: ${currentMsg}`);
+            console.groupEnd();
+            
+            toast.error("Erreur de communication avec le patient.");
             setMessages(prev => [...prev, {
                 sender: 'system', 
-                text: "Erreur de connexion neuronale.", 
-                time: "System"
+                text: "❌ Erreur de communication.", 
+                time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
             }]);
         } finally {
             setIsThinking(false);
         }
     };
 
-    // Fonction helper pour formater les résultats d'examens
+    // Formater les résultats d'examens
     const formatExamResult = (result: any): string => {
         if (!result) return "Résultat non disponible";
         
-        // Si c'est déjà une string, on la retourne
         if (typeof result.rapport_complet === 'string') {
             return result.rapport_complet;
         }
         
-        // Si c'est un objet (comme pour les paramètres vitaux)
         if (typeof result.rapport_complet === 'object') {
             const params = result.rapport_complet;
             let formatted = "**Constantes mesurées:**\n";
             
-            // Formatage des paramètres vitaux
             if (params.TA) formatted += `\n• Tension Artérielle: ${params.TA}`;
             if (params.FC) formatted += `\n• Fréquence Cardiaque: ${params.FC}`;
             if (params.FR) formatted += `\n• Fréquence Respiratoire: ${params.FR}`;
             if (params.SpO2) formatted += `\n• Saturation O₂: ${params.SpO2}`;
             if (params.Temp) formatted += `\n• Température: ${params.Temp}`;
             
-            // Ajout de la conclusion si disponible
             if (result.conclusion) {
                 formatted += `\n\n**Interprétation:** ${result.conclusion}`;
             }
@@ -312,7 +344,6 @@ export default function SimulationContent() {
             return formatted;
         }
         
-        // Si c'est un examen biologique avec valeurs_cles
         if (result.valeurs_cles && typeof result.valeurs_cles === 'object') {
             let formatted = "**Résultats biologiques:**\n";
             
@@ -327,7 +358,6 @@ export default function SimulationContent() {
             return formatted;
         }
         
-        // Fallback: essayer de retourner la conclusion
         return result.conclusion || result.text || "Résultat disponible dans le dossier.";
     };
 
@@ -339,16 +369,19 @@ export default function SimulationContent() {
         if (!sessionId) return;
         setIsThinking(true);
 
+        console.group(`💉 [ACTION MÉDICALE] ${actionType.toUpperCase()}`);
+        console.log(`📋 Examen: ${name}`);
+        console.log(`📝 Justification: ${justification || 'N/A'}`);
+        console.log(`🔗 Session: ${sessionId}`);
+
         setMessages(prev => [...prev, {
             sender: 'system',
-            text: `Action: ${name} en cours...`,
+            text: `⏳ ${name} en cours...`,
             time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'}),
             isAction: true
         }]);
 
         try {
-            console.log(`💉 [ACTION] ${name} (${actionType})`);
-            
             const action: ActionRequest = {
                 action_type: actionType,
                 action_name: name,
@@ -356,9 +389,15 @@ export default function SimulationContent() {
                 content: name
             };
 
+            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/actions`);
+            console.log(`📦 Payload:`, JSON.stringify(action, null, 2));
+
+            const actionStart = performance.now();
             const response = await sendSimulationAction(sessionId, action);
 
-            // Formatage intelligent du résultat
+            console.log(`✅ [API RESPONSE] (${(performance.now() - actionStart).toFixed(2)}ms)`);
+            console.log(`📥 Résultat:`, JSON.stringify(response, null, 2));
+
             const formattedResult = formatExamResult(response.result);
             
             setMessages(prev => [...prev, {
@@ -369,10 +408,14 @@ export default function SimulationContent() {
                 quality: 'good'
             }]);
 
+            console.log(`✅ Résultat affiché`);
+            console.groupEnd();
+
             setModalState(s => ({...s, exam: false}));
 
         } catch (e) {
-            console.error('Action error:', e);
+            console.error('❌ Erreur action:', e);
+            console.groupEnd();
             toast.error("Impossible de réaliser l'examen");
         } finally {
             setIsThinking(false);
@@ -380,12 +423,23 @@ export default function SimulationContent() {
     };
 
     const handleRequestHint = async () => {
-        if (hintsRemaining <= 0) return toast.error("Vous n'avez plus d'indices disponibles.");
+        if (hintsRemaining <= 0) return toast.error("Plus d'indices disponibles.");
         if (!sessionId) return;
 
+        console.group(`💡 [INDICE] Demande`);
+        console.log(`🔗 Session: ${sessionId}`);
+        console.log(`📊 Indices restants: ${hintsRemaining}`);
+
         const loadToast = toast.loading("Le tuteur réfléchit...");
+        
         try {
+            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/request-hint`);
+            
+            const hintStart = performance.now();
             const hintRes = await requestSimulationHint(sessionId);
+            
+            console.log(`✅ [API RESPONSE] (${(performance.now() - hintStart).toFixed(2)}ms)`);
+            console.log(`📥 Indice:`, JSON.stringify(hintRes, null, 2));
             
             setHintsRemaining(prev => prev - 1);
             setMessages(prev => [...prev, {
@@ -394,10 +448,14 @@ export default function SimulationContent() {
                 time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
             }]);
             
+            console.log(`📊 Nouveaux indices restants: ${hintsRemaining - 1}`);
+            console.groupEnd();
+            
             toast.dismiss(loadToast);
-            toastcla.success(`Indice reçu (${hintsRemaining - 1} restants)`);
+            toast.success(`Indice reçu (${hintsRemaining - 1} restants)`);
         } catch(e) {
-            console.error('Hint error:', e);
+            console.error('❌ Erreur indice:', e);
+            console.groupEnd();
             toast.error("Erreur récupération indice", { id: loadToast });
         }
     };
@@ -408,18 +466,39 @@ export default function SimulationContent() {
 
     const handleDiagnosisSubmit = async (medications: string, dosage: string) => {
         if (!sessionId) return;
-        const loadToast = toast.loading("Analyse de votre démarche par le collège d'experts...");
+        
+        console.group(`🎓 [DIAGNOSTIC FINAL]`);
+        console.log(`🔗 Session: ${sessionId}`);
+        console.log(`📋 Diagnostic: ${userDiagnosis}`);
+        console.log(`💊 Traitement: ${medications}`);
+        console.log(`📏 Posologie: ${dosage}`);
+        
+        const loadToast = toast.loading("Évaluation en cours...");
         
         try {
             setModalState(prev => ({ ...prev, drug: false }));
 
+            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/submit`);
+            
+            const submitPayload = {
+                diagnosed_pathology_id: 0,
+                details_text: userDiagnosis,
+                prescribed_medication_ids: [],
+                comment: `Rx: ${medications}. Posologie: ${dosage}`
+            };
+            
+            console.log(`📦 Payload:`, JSON.stringify(submitPayload, null, 2));
+            
+            const submitStart = performance.now();
             const result: SubmitResponse = await submitSimulationDiagnosis(
                 sessionId, 
                 userDiagnosis, 
                 `Rx: ${medications}. Posologie: ${dosage}`
             );
 
-            console.log("🏆 Score Final:", result.score);
+            console.log(`✅ [API RESPONSE] (${(performance.now() - submitStart).toFixed(2)}ms)`);
+            console.log(`📊 Score: ${result.score}/20`);
+            console.log(`📥 Évaluation:`, JSON.stringify(result, null, 2));
 
             setEvaluationResult({
                 score: result.score,
@@ -430,16 +509,22 @@ export default function SimulationContent() {
 
             setGameState('finished');
             setModalState(prev => ({ ...prev, result: true }));
+            
+            console.groupEnd();
+            
             toast.dismiss(loadToast);
-            toast.success(`Évaluation terminée: ${result.score}/20`);
+            toast.success(`Évaluation: ${result.score}/20`);
 
         } catch (e) {
-            console.error('Submit error:', e);
+            console.error('❌ Erreur soumission:', e);
+            console.groupEnd();
             toast.error("Erreur lors de l'évaluation.", { id: loadToast });
         }
     };
 
     const handleExitOrNext = (action: 'exit' | 'next') => {
+        console.log(`🚪 Action: ${action}`);
+        
         if (action === 'exit') {
             router.push('/dashboard/goals');
         } else {
@@ -515,7 +600,7 @@ export default function SimulationContent() {
                 onReset={() => router.push('/dashboard')}
             />
 
-            {/* --- MODAL RÉSULTATS --- */}
+            {/* MODAL RÉSULTATS */}
             {modalState.result && evaluationResult && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur p-4 animate-in fade-in zoom-in-95">
                     <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
@@ -551,13 +636,13 @@ export default function SimulationContent() {
                                     onClick={() => handleExitOrNext('exit')}
                                     className="flex-1 py-3 px-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors"
                                 >
-                                    Quitter
+                                    Retour Objectifs
                                 </button>
                                 <button 
                                     onClick={() => handleExitOrNext('next')}
                                     className="flex-1 py-3 px-4 bg-[#052648] text-white font-bold rounded-xl hover:bg-blue-900 shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02]"
                                 >
-                                    {evaluationResult.nextAction === 'retry_level' ? 'Réessayer' : 'Cas Suivant'}
+                                    Cas Suivant
                                 </button>
                             </div>
                         </div>

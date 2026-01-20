@@ -20,53 +20,47 @@ interface ChatWindowProps {
   isTyping?: boolean;
 }
 
-// ==========================================
-// 🎨 HELPER: Styliser le texte avec italique bleu pour les gestes (*texte*)
-// ==========================================
+// Styliser le texte avec italique bleu pour les gestes (*texte*)
 const parseGestureText = (text: string) => {
     const parts = text.split(/(\*[^*]+\*)/g);
     
     return parts.map((part, index) => {
-        // Si c'est du texte entre étoiles
         if (part.startsWith('*') && part.endsWith('*')) {
-            const gestureText = part.slice(1, -1); // Retirer les *
+            const gestureText = part.slice(1, -1);
             return (
                 <span key={index} className="italic text-blue-600 font-medium">
                     {gestureText}
                 </span>
             );
         }
-        // Sinon, texte normal
         return <span key={index}>{part}</span>;
     });
 };
 
-// ==========================================
-// 📊 COMPOSANT : FEEDBACK TUTEUR (INTÉGRÉ)
-// ==========================================
-const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultOpen: boolean }) => {
+// COMPOSANT : FEEDBACK TUTEUR
+const TutorFeedbackBlock = ({ feedback, defaultOpen, messageIndex }: { feedback: any, defaultOpen: boolean, messageIndex: number }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
 
+    console.log(`[TutorFeedback #${messageIndex}] Feedback reçu:`, feedback, "- Type:", typeof feedback);
+
     if (!feedback) {
-        console.log("⚠️ [TutorFeedback] Pas de feedback reçu");
+        console.log(`⚠️ [TutorFeedback #${messageIndex}] Pas de feedback`);
         return null;
     }
 
-    // CORRECTION: Parser le feedback correctement
+    // Parser le feedback
     let parsedFeedback = feedback;
     
-    // Si c'est une string JSON, parser
     if (typeof feedback === 'string') {
         try {
             parsedFeedback = JSON.parse(feedback);
-            console.log("✅ [TutorFeedback] Feedback parsé depuis JSON:", parsedFeedback);
+            console.log(`✅ [TutorFeedback #${messageIndex}] Feedback parsé depuis JSON:`, parsedFeedback);
         } catch {
-            // Si le parsing échoue, traiter comme texte simple
             parsedFeedback = { general: feedback };
-            console.log("ℹ️ [TutorFeedback] Feedback traité comme texte simple");
+            console.log(`ℹ️ [TutorFeedback #${messageIndex}] Feedback traité comme texte simple`);
         }
     } else {
-        console.log("✅ [TutorFeedback] Feedback déjà objet:", parsedFeedback);
+        console.log(`✅ [TutorFeedback #${messageIndex}] Feedback déjà objet:`, parsedFeedback);
     }
 
     return (
@@ -125,9 +119,6 @@ const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultO
     );
 };
 
-// ==========================================
-// 🏥 COMPOSANT PRINCIPAL
-// ==========================================
 const ChatWindow: React.FC<ChatWindowProps> = ({
   patientData,
   selectedService,
@@ -157,7 +148,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   return (
     <div className="w-full h-[600px] flex flex-col bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden relative">
       
-      {/* 1. EN-TÊTE : Infos Patient + Progression */}
+      {/* EN-TÊTE : Infos Patient + Progression */}
       <div className="flex-shrink-0 p-4 border-b border-gray-100 bg-white z-10 flex justify-between items-center">
         <button onClick={onShowPatientInfo} className="flex items-center gap-4 group transition-opacity hover:opacity-80">
             <div className="relative">
@@ -192,15 +183,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       </div>
 
-      {/* 2. ZONE DE MESSAGES SCROLLABLE */}
+      {/* ZONE DE MESSAGES SCROLLABLE */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/50 scrollbar-thin scrollbar-thumb-gray-300">
         
         {messages.map((msg, index) => {
-          // --- TYPE 1: MESSAGE SYSTÈME / ALERTE ---
+          // MESSAGE SYSTÈME / ALERTE
           if (msg.sender === 'system') {
             const isBad = msg.quality === 'bad';
-            
-            // Si c'est un résultat d'examen formaté (contient des sauts de ligne ou markdown)
             const isFormattedResult = msg.text.includes('\n') || msg.text.includes('**');
             
             if (isFormattedResult) {
@@ -213,7 +202,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                       </div>
                       <div className="flex-1 min-w-0">
                         {msg.text.split('\n').map((line, i) => {
-                          // Support Markdown simple
                           const isBold = line.includes('**');
                           const cleanLine = line.replace(/\*\*/g, '');
                           
@@ -239,7 +227,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               );
             }
             
-            // Message système simple
             return (
               <div key={index} className="flex justify-center my-2 opacity-80 hover:opacity-100 transition-opacity">
                   <span className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 border shadow-sm ${
@@ -254,7 +241,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             );
           }
 
-          // --- TYPE 2: INDICE DU TUTEUR ---
+          // INDICE DU TUTEUR
           if (msg.sender === 'tutor') {
               return (
                   <div key={index} className="flex justify-center my-4 animate-bounce-in">
@@ -273,7 +260,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           
           const isDoctor = msg.sender === 'doctor';
 
-          // --- TYPE 3: ÉCHANGE DOCTEUR / PATIENT ---
+          // ÉCHANGE DOCTEUR / PATIENT
           return (
             <div key={index} className={`flex w-full ${isDoctor ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
                 <div className={`flex items-end gap-2.5 max-w-[85%] ${isDoctor ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -286,7 +273,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     </div>
 
                     <div className="flex flex-col gap-1 min-w-[120px]">
-                        {/* Bulle de message avec parsing des gestes */}
+                        {/* Bulle de message */}
                         <div className={`px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
                             isDoctor
                             ? 'bg-[#052648] text-white rounded-br-none'
@@ -295,11 +282,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             {parseGestureText(msg.text)}
                         </div>
 
-                        {/* --- INJECTION DU FEEDBACK TUTEUR (Sous le message Patient) --- */}
+                        {/* INJECTION DU FEEDBACK TUTEUR (Sous le message Patient) */}
                         {!isDoctor && msg.feedback && (
                             <TutorFeedbackBlock 
                                 feedback={msg.feedback} 
-                                defaultOpen={index === 1} // Premier message patient : ouvert par défaut
+                                defaultOpen={index === 1}
+                                messageIndex={index}
                             />
                         )}
 
@@ -313,7 +301,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           );
         })}
 
-        {/* --- INDICATEUR DE FRAPPE (PATIENT) --- */}
+        {/* INDICATEUR DE FRAPPE (PATIENT) */}
         {isTyping && (
             <div className="flex w-full justify-start animate-in fade-in duration-300">
                <div className="flex items-end gap-2.5 max-w-[85%]">
@@ -331,7 +319,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </div>
         )}
         
-        {/* Ancre pour scroll automatique */}
         <div ref={messagesEndRef} />
 
         {/* Message de fin si GameOver */}
@@ -347,11 +334,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
       </div>
 
-      {/* 3. ZONE DE SAISIE */}
+      {/* ZONE DE SAISIE */}
       <div className="p-4 bg-white border-t border-gray-100 z-10">
         
-        {/* Petit rappel pour la phase tutorée */}
-        {messageCount < 5 && (
+        {messageCount < MAX_QUESTIONS && (
             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-blue-600 animate-fade-in bg-blue-50 w-fit px-2 py-1 rounded-md">
                 <MessageCircleQuestion size={12} /> 
                 Mode Tutoré actif : Vos questions sont analysées par l'IA.

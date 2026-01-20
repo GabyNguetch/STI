@@ -80,7 +80,7 @@ export interface GoalStatus {
     locked: boolean;
 }
 
-// Feedback Tuteur (venant de message_metadata)
+// Feedback Tuteur
 export interface TutorFeedback {
     chronology_check?: string;
     interpretation_guide?: string;
@@ -125,10 +125,16 @@ export interface HintResponse {
     hints_remaining: number;
 }
 
+export interface ChatMessagePayload {
+    sender: "learner";
+    content: string;
+    message_metadata?: Record<string, any>;
+}
+
 // ================= ENDPOINTS =================
 
 /**
- * Démarre une nouvelle session de simulation
+ * Démarre une nouvelle session
  */
 export const startSimulationSession = async (
     learnerId: number,
@@ -144,9 +150,9 @@ export const startSimulationSession = async (
     if (caseId) payload.case_id = caseId;
     if (forceMode) payload.force_mode = forceMode;
 
-    console.group('🚀 [API] Starting Simulation Session');
-    console.log('📤 Request Payload:', JSON.stringify(payload, null, 2));
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.group('🚀 [API] Starting Session');
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+    console.log('⏰', new Date().toISOString());
 
     const start = performance.now();
 
@@ -159,55 +165,87 @@ export const startSimulationSession = async (
             }
         );
 
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Session Started Successfully');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
 
         return response;
     } catch (error) {
-        console.error('❌ Session Start Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Récupérer l'historique détaillé pour le Dashboard
+ * Envoyer un message dans le chat (NOUVELLE FONCTION)
+ */
+export const sendChatMessage = async (
+    sessionId: string,
+    payload: ChatMessagePayload
+): Promise<SimulationMessage> => {
+    console.group('💬 [API] Send Chat Message');
+    console.log('📍 Session:', sessionId);
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+    console.log('⏰', new Date().toISOString());
+
+    const start = performance.now();
+
+    try {
+        const response = await apiClient<SimulationMessage>(
+            `/chat/sessions/${sessionId}/messages`,
+            {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            }
+        );
+
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
+        console.groupEnd();
+
+        return response;
+    } catch (error) {
+        console.error('❌ Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Récupérer l'historique détaillé
  */
 export const getLearnerHistoryDetailed = async (learnerId: number): Promise<DetailedHistoryResponse> => {
     const start = performance.now();
-    console.group(`📚 [API] Get Learner History - ID: ${learnerId}`);
+    console.group(`📚 [API] Get History - Learner ${learnerId}`);
     
     try {
         const data = await apiClient<DetailedHistoryResponse>(`/simulation/learners/${learnerId}/history`);
         
-        const duration = (performance.now() - start).toFixed(2);
-        console.log(`✅ Loaded ${data.historique_par_categorie.length} categories in ${duration}ms`);
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(data, null, 2));
         console.groupEnd();
         
         return data;
     } catch (error) {
-        console.error('❌ History Load Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Envoyer une action (Message, Examen ou Paramètres)
+ * Envoyer une action (Examen, Paramètres)
  */
 export const sendSimulationAction = async (
     sessionId: string,
     action: ActionRequest
 ): Promise<ActionResponse> => {
     const start = performance.now();
-    console.group(`💬 [API] Simulation Action - ${action.action_type}`);
-    console.log('📍 Session ID:', sessionId);
+    console.group(`💉 [API] Action - ${action.action_type}`);
+    console.log('📍 Session:', sessionId);
     console.log('📤 Request:', JSON.stringify(action, null, 2));
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.log('⏰', new Date().toISOString());
     
     try {
         const response = await apiClient<ActionResponse>(
@@ -218,57 +256,57 @@ export const sendSimulationAction = async (
             }
         );
 
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Action Completed');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
 
         return response;
     } catch (error) {
-        console.error('❌ Action Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Récupérer les messages d'une session (avec feedback tuteur)
+ * Récupérer les messages d'une session
  */
 export const getSessionMessages = async (
     sessionId: string,
     limit?: number
 ): Promise<SimulationMessage[]> => {
     const start = performance.now();
-    console.group(`📨 [API] Get Session Messages - ${sessionId}`);
+    console.group(`📨 [API] Get Messages - ${sessionId}`);
     
     const url = limit 
         ? `/chat/sessions/${sessionId}/messages?limit=${limit}`
         : `/chat/sessions/${sessionId}/messages`;
     
+    console.log('📍 URL:', url);
+    
     try {
         const messages = await apiClient<SimulationMessage[]>(url);
         
-        const duration = (performance.now() - start).toFixed(2);
-        console.log(`✅ Loaded ${messages.length} messages in ${duration}ms`);
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
+        console.log(`📨 Count: ${messages.length}`);
         console.log('📥 Messages:', JSON.stringify(messages, null, 2));
         console.groupEnd();
         
         return messages;
     } catch (error) {
-        console.error('❌ Messages Load Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Demander un indice au tuteur
+ * Demander un indice
  */
 export const requestSimulationHint = async (sessionId: string): Promise<HintResponse> => {
     const start = performance.now();
     console.group(`💡 [API] Request Hint - ${sessionId}`);
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.log('⏰', new Date().toISOString());
     
     try {
         const response = await apiClient<HintResponse>(
@@ -276,15 +314,13 @@ export const requestSimulationHint = async (sessionId: string): Promise<HintResp
             { method: 'POST' }
         );
 
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Hint Received');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
 
         return response;
     } catch (error) {
-        console.error('❌ Hint Request Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
@@ -298,11 +334,11 @@ export const submitSimulationDiagnosis = async (
     diagnosisText: string,
     prescriptionText: string
 ): Promise<SubmitResponse> => {
-    console.group('🎓 [API] Submit Final Diagnosis');
-    console.log('📍 Session ID:', sessionId);
+    console.group('🎓 [API] Submit Diagnosis');
+    console.log('📍 Session:', sessionId);
     console.log('📋 Diagnosis:', diagnosisText);
     console.log('💊 Prescription:', prescriptionText);
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.log('⏰', new Date().toISOString());
     
     const payload: SubmitRequest = {
         diagnosed_pathology_id: 0,
@@ -311,7 +347,7 @@ export const submitSimulationDiagnosis = async (
         comment: prescriptionText
     };
     
-    console.log('📤 Request Payload:', JSON.stringify(payload, null, 2));
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
     
     const start = performance.now();
     
@@ -324,34 +360,32 @@ export const submitSimulationDiagnosis = async (
             }
         );
         
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Diagnosis Submitted Successfully');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📊 Score:', response.score);
         console.log('💬 Feedback:', response.feedback_global);
-        console.log('➡️ Next Action:', response.next_action);
-        console.log('📥 Full Response:', JSON.stringify(response, null, 2));
+        console.log('➡️ Next:', response.next_action);
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
         
         return response;
         
     } catch (error) {
-        console.error('❌ Diagnosis Submission Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Récupérer le statut de progression (Goals)
+ * Récupérer le statut de progression
  */
 export const getLearnerGoalsStatus = async (
     learnerId: number
 ): Promise<GoalStatus[]> => {
-    console.log(`🎯 [API] Get Goals Status - Learner ${learnerId}`);
+    console.log(`🎯 [API] Get Goals - Learner ${learnerId}`);
     
     try {
-        // Pour l'instant, fallback mock - à remplacer par vrai endpoint
+        // Mock temporaire - remplacer par vrai endpoint
         return new Promise(resolve => {
             setTimeout(() => {
                 resolve([
@@ -362,7 +396,7 @@ export const getLearnerGoalsStatus = async (
             }, 500);
         });
     } catch (error) {
-        console.warn('⚠️ Goals API warning:', error);
+        console.warn('⚠️ Goals warning:', error);
         return [];
     }
 };
