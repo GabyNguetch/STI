@@ -395,7 +395,7 @@ export default function SimulationContent() {
             }]);
             
             toast.dismiss(loadToast);
-            toast.success(`Indice reçu (${hintsRemaining - 1} restants)`);
+            toastcla.success(`Indice reçu (${hintsRemaining - 1} restants)`);
         } catch(e) {
             console.error('Hint error:', e);
             toast.error("Erreur récupération indice", { id: loadToast });
