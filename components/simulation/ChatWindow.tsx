@@ -20,20 +20,53 @@ interface ChatWindowProps {
   isTyping?: boolean;
 }
 
-// --- COMPOSANT : FEEDBACK TUTEUR (INTÉGRÉ) ---
+// ==========================================
+// 🎨 HELPER: Styliser le texte avec italique bleu pour les gestes (*texte*)
+// ==========================================
+const parseGestureText = (text: string) => {
+    const parts = text.split(/(\*[^*]+\*)/g);
+    
+    return parts.map((part, index) => {
+        // Si c'est du texte entre étoiles
+        if (part.startsWith('*') && part.endsWith('*')) {
+            const gestureText = part.slice(1, -1); // Retirer les *
+            return (
+                <span key={index} className="italic text-blue-600 font-medium">
+                    {gestureText}
+                </span>
+            );
+        }
+        // Sinon, texte normal
+        return <span key={index}>{part}</span>;
+    });
+};
+
+// ==========================================
+// 📊 COMPOSANT : FEEDBACK TUTEUR (INTÉGRÉ)
+// ==========================================
 const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultOpen: boolean }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
 
-    if (!feedback) return null;
+    if (!feedback) {
+        console.log("⚠️ [TutorFeedback] Pas de feedback reçu");
+        return null;
+    }
 
-    // Parse le feedback s'il est en string JSON
+    // CORRECTION: Parser le feedback correctement
     let parsedFeedback = feedback;
+    
+    // Si c'est une string JSON, parser
     if (typeof feedback === 'string') {
         try {
             parsedFeedback = JSON.parse(feedback);
+            console.log("✅ [TutorFeedback] Feedback parsé depuis JSON:", parsedFeedback);
         } catch {
+            // Si le parsing échoue, traiter comme texte simple
             parsedFeedback = { general: feedback };
+            console.log("ℹ️ [TutorFeedback] Feedback traité comme texte simple");
         }
+    } else {
+        console.log("✅ [TutorFeedback] Feedback déjà objet:", parsedFeedback);
     }
 
     return (
@@ -92,7 +125,9 @@ const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultO
     );
 };
 
-// --- COMPOSANT PRINCIPAL ---
+// ==========================================
+// 🏥 COMPOSANT PRINCIPAL
+// ==========================================
 const ChatWindow: React.FC<ChatWindowProps> = ({
   patientData,
   selectedService,
@@ -251,13 +286,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     </div>
 
                     <div className="flex flex-col gap-1 min-w-[120px]">
-                        {/* Bulle de message */}
+                        {/* Bulle de message avec parsing des gestes */}
                         <div className={`px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
                             isDoctor
                             ? 'bg-[#052648] text-white rounded-br-none'
                             : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
                         }`}>
-                            {msg.text}
+                            {parseGestureText(msg.text)}
                         </div>
 
                         {/* --- INJECTION DU FEEDBACK TUTEUR (Sous le message Patient) --- */}

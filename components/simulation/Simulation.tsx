@@ -208,6 +208,7 @@ export default function SimulationContent() {
         setIsThinking(true);
         setInteractionsCount(prev => prev + 1);
 
+        // Message du docteur
         setMessages(prev => [...prev, {
             sender: 'doctor',
             text: currentMsg,
@@ -223,14 +224,20 @@ export default function SimulationContent() {
                 content: currentMsg
             };
 
+            // Envoi de l'action
             await sendSimulationAction(sessionId, action);
 
-            // Récupération des derniers messages avec feedback
-            const recentMessages = await getSessionMessages(sessionId, 2);
+            // CORRECTION: Récupération des 3 derniers messages pour être sûr
+            const recentMessages = await getSessionMessages(sessionId, 3);
             
-            const patientMsg = recentMessages.find(
-                (m: any) => m.sender === 'Patient' || m.sender === 'patient'
-            );
+            console.log("📨 Messages récupérés:", recentMessages);
+
+            // Chercher le dernier message du patient (peut être 'Patient' ou 'patient')
+            const patientMsg = recentMessages
+                .reverse() // Inverser pour avoir le plus récent en premier
+                .find((m: any) => 
+                    m.sender?.toLowerCase() === 'patient'
+                );
 
             console.timeEnd("ChatTurn");
 
@@ -238,12 +245,22 @@ export default function SimulationContent() {
                 const responseText = patientMsg.content || "...";
                 const feedbackData = patientMsg.message_metadata?.tutor_feedback;
 
-                setMessages(prev => [...prev, {
+                console.log("🤖 Réponse patient:", responseText);
+                console.log("🎓 Feedback tuteur brut:", feedbackData);
+
+                // CORRECTION: Créer le message avec le feedback au bon format
+                const newPatientMessage: Message = {
                     sender: 'patient',
                     text: responseText,
                     time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'}),
-                    feedback: feedbackData ? JSON.stringify(feedbackData) : undefined 
-                }]);
+                    feedback: feedbackData // Garder l'objet directement, pas en JSON string
+                };
+
+                console.log("💾 Message patient formaté:", newPatientMessage);
+
+                setMessages(prev => [...prev, newPatientMessage]);
+            } else {
+                console.warn("⚠️ Aucun message patient trouvé dans la réponse");
             }
 
             if (interactionsCount + 1 >= maxInteractions) {
@@ -254,10 +271,12 @@ export default function SimulationContent() {
             }
 
         } catch (error) {
-            console.error('Chat error:', error);
+            console.error('❌ Chat error:', error);
             toast.error("Le patient ne répond pas...");
             setMessages(prev => [...prev, {
-                sender: 'system', text: "Erreur de connexion neuronale.", time: "System"
+                sender: 'system', 
+                text: "Erreur de connexion neuronale.", 
+                time: "System"
             }]);
         } finally {
             setIsThinking(false);
