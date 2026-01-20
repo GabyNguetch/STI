@@ -20,10 +20,11 @@ export interface StartSessionResponse {
 }
 
 export interface ActionRequest {
-    action_type: 'question' | 'examen_complementaire' | 'consulter_image' | 'parametres_vitaux';
+    action_type: 'question' | 'examen_complementaire' | 'consulter_image' | 'parametres_vitaux' | 'biologie';
     action_name: string;
     content?: string;
     justification?: string;
+    parameters?: any;
 }
 
 export interface ActionResponse {
@@ -31,17 +32,25 @@ export interface ActionResponse {
     action_name: string;
     content?: string;
     result?: {
-        rapport?: string;
+        type_resultat?: string;
+        rapport_complet?: string;
         conclusion?: string;
+        valeurs_cles?: any;
         text?: string;
         data?: any;
     };
     feedback?: string;
+    meta?: {
+        virtual_cost?: number;
+        virtual_duration?: number;
+        impact_score?: number | null;
+    };
+    timestamp?: string;
 }
 
 export interface SubmitRequest {
     diagnosed_pathology_id: number;
-    details_text: string;
+    details_text?: string;
     prescribed_medication_ids?: number[];
     comment?: string;
 }
@@ -52,9 +61,13 @@ export interface SubmitResponse {
     feedback_global: string;
     evaluation: {
         score_total: number;
+        score_diagnostic?: number;
+        score_therapeutique?: number;
+        score_demarche?: number;
         details: any;
     };
     next_action: 'next_case' | 'retry_level' | 'module_completed';
+    recommendation_next_step?: string;
 }
 
 export interface GoalStatus {
@@ -67,18 +80,62 @@ export interface GoalStatus {
     locked: boolean;
 }
 
+// Feedback Tuteur (venant de message_metadata)
+export interface TutorFeedback {
+    chronology_check?: string;
+    interpretation_guide?: string;
+    better_question?: string;
+    general?: string;
+}
+
+export interface SimulationMessage {
+    id: number;
+    sender: 'learner' | 'patient' | 'system' | 'tutor' | 'Patient' | 'Learner';
+    content: string;
+    timestamp: string;
+    message_metadata?: {
+        tutor_feedback?: TutorFeedback;
+        latencies?: any;
+        is_action?: boolean;
+        generated_by?: string;
+    };
+}
+
+export interface SessionHistoryCategory {
+    categorie: string;
+    moyenne_categorie: number;
+    progression_percentage?: number;
+    sessions: Array<{
+        session_id: string;
+        date: string;
+        etat: string;
+        note: number;
+        cas_titre: string;
+    }>;
+}
+
+export interface DetailedHistoryResponse {
+    learner_id: number;
+    historique_par_categorie: SessionHistoryCategory[];
+}
+
+export interface HintResponse {
+    hint_text: string;
+    content: string;
+    hints_remaining: number;
+}
+
 // ================= ENDPOINTS =================
 
 /**
- * ✅ FIXÉ: Démarre une nouvelle session de simulation
- * Retourne maintenant l'objet complet au lieu de juste l'ID
+ * Démarre une nouvelle session de simulation
  */
 export const startSimulationSession = async (
     learnerId: number,
     caseId: number | null = null,
     category: string,
     forceMode?: 'diagnostic' | 'training' | 'evaluation'
-): Promise<StartSessionResponse> => {  // ✅ Type de retour corrigé
+): Promise<StartSessionResponse> => {
     const payload: any = {
         learner_id: learnerId,
         category: category
@@ -87,175 +144,214 @@ export const startSimulationSession = async (
     if (caseId) payload.case_id = caseId;
     if (forceMode) payload.force_mode = forceMode;
 
-    console.log('📤 [API] Starting session with payload:', payload);
-
-    const response = await apiClient<StartSessionResponse>(
-        '/simulation/sessions/start',
-        {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        }
-    );
-
-    console.log('📥 [API] Session started, response:', response);
-
-    // ✅ Retourne l'objet complet
-    return response;
-};
-
-export const sendSimulationAction = async (
-    sessionId: string,
-    request: ActionRequest
-): Promise<ActionResponse> => {
-    const chatMessage = {
-        sender: 'learner',
-        content: request.content || request.action_name,
-        message_metadata: {
-            action_type: request.action_type,
-            action_name: request.action_name,
-            justification: request.justification
-        }
-    };
-
-    console.log('📤 [API] Sending message:', chatMessage);
-
-    // 1. Envoyer le message user
-    const response = await apiClient<any>(
-        `/chat/sessions/${sessionId}/messages`,
-        { method: 'POST', body: JSON.stringify(chatMessage) }
-    );
-
-    const userId = response.id;
-    console.log('📥 [API] User message ID:', userId);
-
-    // 2. Attendre la réponse (ajuster selon votre backend)
-    await new Promise(resolve => setTimeout(resolve, 2500));
-
-    // 3. Récupérer l'historique
-    const historyResponse = await apiClient<any>(
-        `/chat/sessions/${sessionId}/messages?limit=20`
-    );
-
-    const messages = Array.isArray(historyResponse) 
-        ? historyResponse 
-        : (historyResponse.messages || []);
-    
-    console.log('📚 [API] Messages in history:', messages.length);
-
-    // 4. ✅ Trouver la réponse du Patient (insensible à la casse)
-    const patientResponse = messages
-        .filter((msg: any) => {
-            const isAfterUserMessage = msg.id > userId;
-            const senderLower = (msg.sender || '').toLowerCase();
-            const isPatientOrTutor = senderLower === 'patient' || 
-                                     senderLower === 'tutor' || 
-                                     senderLower === 'system';
-            return isAfterUserMessage && isPatientOrTutor;
-        })
-        .sort((a: any, b: any) => a.id - b.id)[0]; // Prendre le premier après userId
-
-    console.log('🤖 [API] Patient response found:', patientResponse);
-
-    const finalContent = patientResponse?.content || 
-                        "Le patient tarde à répondre...";
-
-    return {
-        action_type: request.action_type,
-        action_name: request.action_name,
-        content: finalContent,
-        result: {
-            text: finalContent,
-            data: patientResponse?.message_metadata || {}
-        },
-        feedback: patientResponse?.message_metadata?.feedback
-    };
-};
-
-/**
- * 3. Demande un indice
- */
-export const requestSimulationHint = async (
-    sessionId: string
-): Promise<{ hint_type: string; content: string; remaining_hints: number }> => {
-    return await apiClient(
-        `/simulation/sessions/${sessionId}/request-hint`,
-        {
-            method: 'POST',
-            body: JSON.stringify({})
-        }
-    );
-};
-
-/**
- * 4. Soumet le diagnostic final
- */
-export const submitSimulationDiagnosis = async (
-    sessionId: string,
-    diagnosisText: string,
-    prescriptionText: string
-): Promise<SubmitResponse> => {
-    
-    console.group('🎓 [EVALUATION] Submit Final Diagnosis');
-    
-    const route = `/simulation/sessions/${sessionId}/submit`;
-    const fullUrl = `/api/backend${route}`;
-    
-    // ✅ Payload selon la spec de votre API
-    const payload = {
-        diagnosed_pathology_id: 0,
-        prescribed_medication_ids: [] // Vide pour l'instant
-        // Note: details_text et comment ne sont pas dans la spec API
-        // mais on peut les ajouter si votre backend les accepte
-    };
-    
-    console.log('📍 Route:', route);
-    console.log('🌐 Full URL:', fullUrl);
+    console.group('🚀 [API] Starting Simulation Session');
     console.log('📤 Request Payload:', JSON.stringify(payload, null, 2));
-    console.log('📋 Diagnosis Text:', diagnosisText);
-    console.log('💊 Prescription Text:', prescriptionText);
     console.log('⏰ Timestamp:', new Date().toISOString());
-    
+
+    const start = performance.now();
+
     try {
-        const response = await apiClient<SubmitResponse>(
-            route,
+        const response = await apiClient<StartSessionResponse>(
+            '/simulation/sessions/start',
             {
                 method: 'POST',
                 body: JSON.stringify(payload)
             }
         );
-        
-        console.log('✅ Backend Response:', response);
-        console.log('📊 Evaluation Scores:', {
-            diagnostic: response.evaluation?.score_diagnostic,
-            therapeutique: response.evaluation?.score_therapeutique,
-            demarche: response.evaluation?.score_demarche,
-            total: response.evaluation?.score_total || response.score
-        });
-        console.log('💬 Feedback:', response.feedback_global);
-        console.log('➡️ Next Step:', response.next_action || response.recommendation_next_step);
+
+        const duration = (performance.now() - start).toFixed(2);
+        console.log('✅ Session Started Successfully');
+        console.log('⏱️ Duration:', duration + 'ms');
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
-        
+
         return response;
-        
-    } catch (error: any) {
-        console.error('❌ Evaluation Error:', error);
-        console.error('📛 Error Details:', {
-            message: error.message,
-            status: error.status,
-            details: error.details
-        });
+    } catch (error) {
+        console.error('❌ Session Start Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * 5. Récupère le statut de progression
+ * Récupérer l'historique détaillé pour le Dashboard
+ */
+export const getLearnerHistoryDetailed = async (learnerId: number): Promise<DetailedHistoryResponse> => {
+    const start = performance.now();
+    console.group(`📚 [API] Get Learner History - ID: ${learnerId}`);
+    
+    try {
+        const data = await apiClient<DetailedHistoryResponse>(`/simulation/learners/${learnerId}/history`);
+        
+        const duration = (performance.now() - start).toFixed(2);
+        console.log(`✅ Loaded ${data.historique_par_categorie.length} categories in ${duration}ms`);
+        console.log('📥 Response:', JSON.stringify(data, null, 2));
+        console.groupEnd();
+        
+        return data;
+    } catch (error) {
+        console.error('❌ History Load Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Envoyer une action (Message, Examen ou Paramètres)
+ */
+export const sendSimulationAction = async (
+    sessionId: string,
+    action: ActionRequest
+): Promise<ActionResponse> => {
+    const start = performance.now();
+    console.group(`💬 [API] Simulation Action - ${action.action_type}`);
+    console.log('📍 Session ID:', sessionId);
+    console.log('📤 Request:', JSON.stringify(action, null, 2));
+    console.log('⏰ Timestamp:', new Date().toISOString());
+    
+    try {
+        const response = await apiClient<ActionResponse>(
+            `/simulation/sessions/${sessionId}/actions`,
+            {
+                method: 'POST',
+                body: JSON.stringify(action)
+            }
+        );
+
+        const duration = (performance.now() - start).toFixed(2);
+        console.log('✅ Action Completed');
+        console.log('⏱️ Duration:', duration + 'ms');
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
+        console.groupEnd();
+
+        return response;
+    } catch (error) {
+        console.error('❌ Action Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Récupérer les messages d'une session (avec feedback tuteur)
+ */
+export const getSessionMessages = async (
+    sessionId: string,
+    limit?: number
+): Promise<SimulationMessage[]> => {
+    const start = performance.now();
+    console.group(`📨 [API] Get Session Messages - ${sessionId}`);
+    
+    const url = limit 
+        ? `/chat/sessions/${sessionId}/messages?limit=${limit}`
+        : `/chat/sessions/${sessionId}/messages`;
+    
+    try {
+        const messages = await apiClient<SimulationMessage[]>(url);
+        
+        const duration = (performance.now() - start).toFixed(2);
+        console.log(`✅ Loaded ${messages.length} messages in ${duration}ms`);
+        console.log('📥 Messages:', JSON.stringify(messages, null, 2));
+        console.groupEnd();
+        
+        return messages;
+    } catch (error) {
+        console.error('❌ Messages Load Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Demander un indice au tuteur
+ */
+export const requestSimulationHint = async (sessionId: string): Promise<HintResponse> => {
+    const start = performance.now();
+    console.group(`💡 [API] Request Hint - ${sessionId}`);
+    console.log('⏰ Timestamp:', new Date().toISOString());
+    
+    try {
+        const response = await apiClient<HintResponse>(
+            `/simulation/sessions/${sessionId}/request-hint`,
+            { method: 'POST' }
+        );
+
+        const duration = (performance.now() - start).toFixed(2);
+        console.log('✅ Hint Received');
+        console.log('⏱️ Duration:', duration + 'ms');
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
+        console.groupEnd();
+
+        return response;
+    } catch (error) {
+        console.error('❌ Hint Request Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Soumettre le diagnostic final
+ */
+export const submitSimulationDiagnosis = async (
+    sessionId: string,
+    diagnosisText: string,
+    prescriptionText: string
+): Promise<SubmitResponse> => {
+    console.group('🎓 [API] Submit Final Diagnosis');
+    console.log('📍 Session ID:', sessionId);
+    console.log('📋 Diagnosis:', diagnosisText);
+    console.log('💊 Prescription:', prescriptionText);
+    console.log('⏰ Timestamp:', new Date().toISOString());
+    
+    const payload: SubmitRequest = {
+        diagnosed_pathology_id: 0,
+        details_text: diagnosisText,
+        prescribed_medication_ids: [],
+        comment: prescriptionText
+    };
+    
+    console.log('📤 Request Payload:', JSON.stringify(payload, null, 2));
+    
+    const start = performance.now();
+    
+    try {
+        const response = await apiClient<SubmitResponse>(
+            `/simulation/sessions/${sessionId}/submit`,
+            {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            }
+        );
+        
+        const duration = (performance.now() - start).toFixed(2);
+        console.log('✅ Diagnosis Submitted Successfully');
+        console.log('⏱️ Duration:', duration + 'ms');
+        console.log('📊 Score:', response.score);
+        console.log('💬 Feedback:', response.feedback_global);
+        console.log('➡️ Next Action:', response.next_action);
+        console.log('📥 Full Response:', JSON.stringify(response, null, 2));
+        console.groupEnd();
+        
+        return response;
+        
+    } catch (error) {
+        console.error('❌ Diagnosis Submission Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Récupérer le statut de progression (Goals)
  */
 export const getLearnerGoalsStatus = async (
     learnerId: number
 ): Promise<GoalStatus[]> => {
+    console.log(`🎯 [API] Get Goals Status - Learner ${learnerId}`);
+    
     try {
+        // Pour l'instant, fallback mock - à remplacer par vrai endpoint
         return new Promise(resolve => {
             setTimeout(() => {
                 resolve([
@@ -266,21 +362,15 @@ export const getLearnerGoalsStatus = async (
             }, 500);
         });
     } catch (error) {
-        console.warn('Goals API warning:', error);
+        console.warn('⚠️ Goals API warning:', error);
         return [];
     }
 };
 
 /**
- * 6. Récupère les détails d'une session
+ * Récupérer les détails d'une session
  */
 export const getSessionDetails = async (sessionId: string) => {
+    console.log(`📄 [API] Get Session Details - ${sessionId}`);
     return await apiClient(`/simulation/sessions/${sessionId}`);
-};
-
-/**
- * Récupère l'historique des messages d'une session
- */
-export const getSessionMessages = async (sessionId: string) => {
-    return await apiClient(`/chat/sessions/${sessionId}/messages`);
 };

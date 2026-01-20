@@ -1,18 +1,27 @@
 // app/inscription/page.tsx
 'use client';
 
-import React, { useState } from 'react';
-import AuthForm from "@/components/auth/Authentification";
-import Onboarding from "@/components/auth/Onboarding";
+import React, { useState, Suspense } from 'react';
+import dynamic from 'next/dynamic';
+import FunFactLoader from "@/components/common/FunFactLoader";
+
+const AuthForm = dynamic(() => import('@/components/auth/Authentification'), { loading: () => <FunFactLoader />, ssr: false });
+const Onboarding = dynamic(() => import('@/components/auth/Onboarding'), { loading: () => <FunFactLoader />, ssr: false });
+
+function InscriptionContent() {
+    const [registrationStarted, setRegistrationStarted] = useState(false);
+
+    if (registrationStarted) {
+        return <Onboarding />;
+    }
+  
+    return <AuthForm mode="register" onSuccess={() => setRegistrationStarted(true)} />;
+}
 
 export default function InscriptionPage() {
-  const [registrationStarted, setRegistrationStarted] = useState(false);
-
-  // Si l'utilisateur a rempli la première étape (AuthForm), on affiche l'Onboarding
-  if (registrationStarted) {
-    return <Onboarding />;
-  }
-  
-  // Sinon, formulaire initial (Nom/Email -> LocalStorage)
-  return <AuthForm mode="register" onSuccess={() => setRegistrationStarted(true)} />;
+    return (
+        <Suspense fallback={<FunFactLoader />}>
+            <InscriptionContent />
+        </Suspense>
+    );
 }

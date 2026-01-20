@@ -1,8 +1,8 @@
 // components/simulation/ChatWindow.tsx
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { User, Stethoscope, FileText, Send, Lightbulb, MoreHorizontal, AlertTriangle, CheckCircle2, MessageCircleQuestion } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { User, Stethoscope, FileText, Send, Lightbulb, AlertTriangle, CheckCircle2, MessageCircleQuestion, AlertCircle, BookOpen, ChevronUp, ChevronDown } from 'lucide-react';
 import { Message, Patient, Service } from '@/types/simulation/types';
 
 interface ChatWindowProps {
@@ -20,28 +20,74 @@ interface ChatWindowProps {
   isTyping?: boolean;
 }
 
-// --- SOUS-COMPOSANT : Feedback Visuel du Tuteur (Le Badge Vert/Jaune) ---
-const MessageFeedback = ({ status, reason }: { status?: string, reason?: string }) => {
-    // On n'affiche rien si pas de statut ou statut neutre
-    if (!status || status === 'neutral') return null;
-    
-    // Détermine si c'est positif ou "warning"
-    const isGood = status === 'good';
-    
+// --- COMPOSANT : FEEDBACK TUTEUR (INTÉGRÉ) ---
+const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultOpen: boolean }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    if (!feedback) return null;
+
+    // Parse le feedback s'il est en string JSON
+    let parsedFeedback = feedback;
+    if (typeof feedback === 'string') {
+        try {
+            parsedFeedback = JSON.parse(feedback);
+        } catch {
+            parsedFeedback = { general: feedback };
+        }
+    }
+
     return (
-        <div className={`mt-2 text-xs p-2 rounded-lg flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-300 ${
-            isGood 
-            ? 'bg-green-100 text-green-800 border-l-4 border-green-500' 
-            : 'bg-amber-100 text-amber-800 border-l-4 border-amber-500'
-        }`}>
-            {isGood ? (
-                <CheckCircle2 size={14} className="mt-0.5 flex-shrink-0"/> 
-            ) : ( 
-                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0"/>
+        <div className="mt-2 max-w-[90%] ml-auto animate-in slide-in-from-top-2 fade-in duration-500">
+            <button 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-t-lg transition-colors ${
+                    isOpen 
+                        ? 'bg-amber-100 text-amber-800' 
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+            >
+                <Lightbulb size={12} className={isOpen ? "fill-amber-600 text-amber-600" : ""}/> 
+                Analyse du Tuteur
+                {isOpen ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+            </button>
+            
+            {isOpen && (
+                <div className="bg-amber-50 border border-amber-100 rounded-b-lg rounded-tr-lg p-3 text-xs space-y-3 shadow-sm text-slate-700">
+                    {parsedFeedback.chronology_check && (
+                        <div className="flex gap-2">
+                            <div className="mt-0.5 min-w-[16px]"><CheckCircle2 size={14} className="text-emerald-600"/></div>
+                            <div>
+                                <strong className="block text-emerald-800 text-[10px] uppercase tracking-wide">Pertinence</strong>
+                                {parsedFeedback.chronology_check}
+                            </div>
+                        </div>
+                    )}
+                    {parsedFeedback.interpretation_guide && (
+                        <div className="flex gap-2">
+                            <div className="mt-0.5 min-w-[16px]"><BookOpen size={14} className="text-blue-600"/></div>
+                            <div>
+                                <strong className="block text-blue-800 text-[10px] uppercase tracking-wide">Interprétation</strong>
+                                {parsedFeedback.interpretation_guide}
+                            </div>
+                        </div>
+                    )}
+                    {parsedFeedback.better_question && (
+                        <div className="flex gap-2 p-2 bg-white rounded border border-amber-100 italic">
+                            <div className="mt-0.5 min-w-[16px]"><AlertCircle size={14} className="text-orange-500"/></div>
+                            <div>
+                                <strong className="block text-orange-800 text-[10px] uppercase tracking-wide">Suggestion</strong>
+                                "{parsedFeedback.better_question}"
+                            </div>
+                        </div>
+                    )}
+                    {parsedFeedback.general && !parsedFeedback.chronology_check && (
+                        <div className="flex gap-2">
+                            <div className="mt-0.5 min-w-[16px]"><Lightbulb size={14} className="text-amber-600"/></div>
+                            <div>{parsedFeedback.general}</div>
+                        </div>
+                    )}
+                </div>
             )}
-            <span className="leading-snug">
-                {reason || (isGood ? "Question pertinente." : "Attention, peu pertinent.")}
-            </span>
         </div>
     );
 };
@@ -118,6 +164,47 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           // --- TYPE 1: MESSAGE SYSTÈME / ALERTE ---
           if (msg.sender === 'system') {
             const isBad = msg.quality === 'bad';
+            
+            // Si c'est un résultat d'examen formaté (contient des sauts de ligne ou markdown)
+            const isFormattedResult = msg.text.includes('\n') || msg.text.includes('**');
+            
+            if (isFormattedResult) {
+              return (
+                <div key={index} className="flex justify-center my-4">
+                  <div className="bg-white border border-blue-100 rounded-xl shadow-md p-4 max-w-lg w-full animate-in slide-in-from-bottom-2 fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-blue-50 p-2 rounded-lg shrink-0">
+                        <FileText size={20} className="text-blue-600"/>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {msg.text.split('\n').map((line, i) => {
+                          // Support Markdown simple
+                          const isBold = line.includes('**');
+                          const cleanLine = line.replace(/\*\*/g, '');
+                          
+                          if (cleanLine.trim() === '') return null;
+                          
+                          return (
+                            <p 
+                              key={i} 
+                              className={`text-sm leading-relaxed ${
+                                isBold 
+                                  ? 'font-bold text-blue-900 mb-2 mt-3 first:mt-0' 
+                                  : 'text-slate-700 ml-2'
+                              }`}
+                            >
+                              {cleanLine}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            
+            // Message système simple
             return (
               <div key={index} className="flex justify-center my-2 opacity-80 hover:opacity-100 transition-opacity">
                   <span className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 border shadow-sm ${
@@ -151,7 +238,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           
           const isDoctor = msg.sender === 'doctor';
 
-          // --- TYPE 3: ECHANGE DOCTEUR / PATIENT ---
+          // --- TYPE 3: ÉCHANGE DOCTEUR / PATIENT ---
           return (
             <div key={index} className={`flex w-full ${isDoctor ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
                 <div className={`flex items-end gap-2.5 max-w-[85%] ${isDoctor ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -173,9 +260,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             {msg.text}
                         </div>
 
-                        {/* --- INJECTION DU FEEDBACK TUTEUR (Sous le message Docteur) --- */}
-                        {isDoctor && msg.feedback && (
-                            <MessageFeedback status={msg.quality} reason={msg.feedback} />
+                        {/* --- INJECTION DU FEEDBACK TUTEUR (Sous le message Patient) --- */}
+                        {!isDoctor && msg.feedback && (
+                            <TutorFeedbackBlock 
+                                feedback={msg.feedback} 
+                                defaultOpen={index === 1} // Premier message patient : ouvert par défaut
+                            />
                         )}
 
                         {/* Horodatage */}

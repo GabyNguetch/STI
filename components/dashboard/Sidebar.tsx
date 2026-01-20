@@ -4,10 +4,8 @@ import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
   Stethoscope, 
-  Target,           // Pour Objectifs
-  Brain,            // Pour Compétences
-  TrendingUp,       // Pour Parcours/Traces
-  ScanFace,         // Pour Profil Cognitif/Analyse
+  Target,
+  ScanFace,
   LogOut, 
   HeartPulse, 
   ChevronRight, 
@@ -24,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
   const [isHovered, setIsHovered] = useState(false);
   const { logout } = useAuth();
 
-  // --- CONFIGURATION DES 6 ONGLETS ---
+  // --- CONFIGURATION DES ONGLETS (Nettoyée) ---
   const menuItems = [
     { 
       id: 'overview', 
@@ -32,19 +30,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
       icon: LayoutDashboard 
     },
     { 
-      id: 'competencies', 
-      label: 'Compétences', 
-      icon: Brain 
-    },
-    { 
       id: 'goals', 
       label: 'Objectifs', 
       icon: Play 
-    },
-    { 
-      id: 'journey', 
-      label: 'Mon parcours', 
-      icon: TrendingUp 
     },
     { 
       id: 'practice', 
@@ -52,10 +40,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
       icon: Stethoscope 
     },
     { 
-      id: 'analytic_profile', // Nommé ainsi pour différencier du "Setting Profile"
+      id: 'analytic_profile', 
       label: 'Mon profil', 
       icon: ScanFace 
-    },
+    }
   ];
 
   return (
@@ -90,7 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, activeView }) => {
         </div>
 
         {/* NAVIGATION */}
-        <nav className="flex-1 flex flex-col space-y-2 py-4 w-full overflow-y-auto no-scrollbar">
+        <nav className="flex-1 flex flex-col space-y-16 py-4 w-full overflow-y-auto no-scrollbar">
           {menuItems.map((item) => {
             const isActive = activeView === item.id;
             return (
