@@ -460,67 +460,89 @@ export default function SimulationContent() {
         }
     };
 
-    // ==========================================
-    // 🎓 EVALUATION & FIN
-    // ==========================================
+ // =============================================================================
+// app/simulation/SimulationContent.tsx - HANDLER CORRIGÉ
+// =============================================================================
 
-    const handleDiagnosisSubmit = async (medications: string, dosage: string) => {
-        if (!sessionId) return;
+const handleDiagnosisSubmit = async (medications: string, dosage: string) => {
+    if (!sessionId) {
+        toast.error("Session ID manquant");
+        return;
+    }
+    
+    console.group(`🎓 [DIAGNOSTIC FINAL]`);
+    console.log(`🔗 Session: ${sessionId}`);
+    console.log(`📋 Diagnostic: ${userDiagnosis}`);
+    console.log(`💊 Médicaments: ${medications}`);
+    console.log(`📏 Posologie: ${dosage}`);
+    
+    const loadToast = toast.loading("🔄 Évaluation en cours...");
+    
+    try {
+        // Fermer la modale
+        setModalState(prev => ({ ...prev, drug: false }));
+
+        // ✅ CONSTRUIRE LES TEXTES CONFORMES
+        const prescriptionText = `${medications}. Posologie: ${dosage}`;
+        const justification = `Diagnostic posé après ${interactionsCount} questions. Démarche clinique basée sur l'anamnèse et les examens complémentaires.`;
+
+        console.log(`🚀 [API CALL] submitSimulationDiagnosis`);
+        console.log(`   diagnosed_pathology_text: "${userDiagnosis}"`);
+        console.log(`   prescribed_treatment_text: "${prescriptionText}"`);
+        console.log(`   final_justification: "${justification}"`);
         
-        console.group(`🎓 [DIAGNOSTIC FINAL]`);
-        console.log(`🔗 Session: ${sessionId}`);
-        console.log(`📋 Diagnostic: ${userDiagnosis}`);
-        console.log(`💊 Traitement: ${medications}`);
-        console.log(`📏 Posologie: ${dosage}`);
+        const submitStart = performance.now();
         
-        const loadToast = toast.loading("Évaluation en cours...");
+        // ✅ APPEL AVEC LES BONS PARAMÈTRES
+        const result: SubmitResponse = await submitSimulationDiagnosis(
+            sessionId, 
+            userDiagnosis,           // diagnosed_pathology_text
+            prescriptionText,        // prescribed_treatment_text
+            justification            // final_justification
+        );
+
+        const duration = (performance.now() - submitStart).toFixed(2);
+        console.log(`✅ [API SUCCESS] Réponse reçue en ${duration}ms`);
+        console.log(`📊 Scores détaillés:`);
+        console.log(`   Total: ${result.evaluation.score_total}/20`);
+        console.log(`   Diagnostic: ${result.evaluation.score_diagnostic}/10`);
+        console.log(`   Thérapeutique: ${result.evaluation.score_therapeutique}/5`);
+        console.log(`   Démarche: ${result.evaluation.score_demarche}/5`);
+        console.log(`💬 Feedback: "${result.feedback_global}"`);
+        console.log(`➡️ Prochaine étape: "${result.recommendation_next_step}"`);
+
+        // ✅ SAUVEGARDER LES RÉSULTATS
+        setEvaluationResult({
+            score: result.evaluation.score_total,
+            maxScore: 20, 
+            feedback: result.feedback_global,
+            nextAction: result.recommendation_next_step
+        });
+
+        setGameState('finished');
+        setModalState(prev => ({ ...prev, result: true }));
         
-        try {
-            setModalState(prev => ({ ...prev, drug: false }));
+        console.groupEnd();
+        
+        toast.dismiss(loadToast);
+        toast.success(`🎉 Note finale: ${result.evaluation.score_total}/20`, { 
+            duration: 4000,
+            icon: result.evaluation.score_total >= 10 ? '✅' : '📚'
+        });
 
-            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/submit`);
-            
-            const submitPayload = {
-                diagnosed_pathology_id: 0,
-                details_text: userDiagnosis,
-                prescribed_medication_ids: [],
-                comment: `Rx: ${medications}. Posologie: ${dosage}`
-            };
-            
-            console.log(`📦 Payload:`, JSON.stringify(submitPayload, null, 2));
-            
-            const submitStart = performance.now();
-            const result: SubmitResponse = await submitSimulationDiagnosis(
-                sessionId, 
-                userDiagnosis, 
-                `Rx: ${medications}. Posologie: ${dosage}`
-            );
+    } catch (e: any) {
+        console.error('❌ [ERREUR CRITIQUE] Soumission échouée:', e);
+        console.error('   Message:', e.message);
+        console.error('   Stack:', e.stack);
+        console.groupEnd();
+        
+        toast.error(`❌ Erreur: ${e.message || 'Échec de l\'évaluation'}`, { 
+            id: loadToast,
+            duration: 6000 
+        });
+    }
+};
 
-            console.log(`✅ [API RESPONSE] (${(performance.now() - submitStart).toFixed(2)}ms)`);
-            console.log(`📊 Score: ${result.score}/20`);
-            console.log(`📥 Évaluation:`, JSON.stringify(result, null, 2));
-
-            setEvaluationResult({
-                score: result.score,
-                maxScore: 20, 
-                feedback: result.feedback_global,
-                nextAction: result.next_action
-            });
-
-            setGameState('finished');
-            setModalState(prev => ({ ...prev, result: true }));
-            
-            console.groupEnd();
-            
-            toast.dismiss(loadToast);
-            toast.success(`Évaluation: ${result.score}/20`);
-
-        } catch (e) {
-            console.error('❌ Erreur soumission:', e);
-            console.groupEnd();
-            toast.error("Erreur lors de l'évaluation.", { id: loadToast });
-        }
-    };
 
     const handleExitOrNext = (action: 'exit' | 'next') => {
         console.log(`🚪 Action: ${action}`);

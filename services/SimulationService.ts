@@ -48,28 +48,28 @@ export interface ActionResponse {
     timestamp?: string;
 }
 
+
+// ✅ INTERFACE CONFORME API v1 - UNIQUEMENT CES 3 CHAMPS
 export interface SubmitRequest {
-    diagnosed_pathology_id: number;
-    details_text?: string;
-    prescribed_medication_ids?: number[];
-    comment?: string;
+    diagnosed_pathology_text: string;      // REQUIS
+    prescribed_treatment_text: string;     // REQUIS
+    final_justification?: string;          // OPTIONNEL
 }
 
+// ✅ RESPONSE ATTENDUE
 export interface SubmitResponse {
-    session_id: string;
-    score: number;
-    feedback_global: string;
     evaluation: {
-        score_total: number;
-        score_diagnostic?: number;
-        score_therapeutique?: number;
-        score_demarche?: number;
-        details: any;
+        score_diagnostic: number;       // /10
+        score_therapeutique: number;    // /5
+        score_demarche: number;         // /5
+        score_total: number;            // /20
+        details?: any;
     };
-    next_action: 'next_case' | 'retry_level' | 'module_completed';
-    recommendation_next_step?: string;
+    feedback_global: string;
+    recommendation_next_step: string;
+    session_duration_seconds: number;
+    virtual_cost_total: number;
 }
-
 export interface GoalStatus {
     category: string;
     level_name: string;
@@ -327,27 +327,30 @@ export const requestSimulationHint = async (sessionId: string): Promise<HintResp
 };
 
 /**
- * Soumettre le diagnostic final
+ * ✅ FONCTION CORRIGÉE - Soumettre le diagnostic final
  */
 export const submitSimulationDiagnosis = async (
     sessionId: string,
     diagnosisText: string,
-    prescriptionText: string
+    prescriptionText: string,
+    justification?: string
 ): Promise<SubmitResponse> => {
     console.group('🎓 [API] Submit Diagnosis');
     console.log('📍 Session:', sessionId);
-    console.log('📋 Diagnosis:', diagnosisText);
+    console.log('📋 Diagnostic:', diagnosisText);
     console.log('💊 Prescription:', prescriptionText);
+    console.log('📝 Justification:', justification || 'N/A');
     console.log('⏰', new Date().toISOString());
     
+    // ✅ PAYLOAD STRICT - SEULEMENT CES 3 CHAMPS
     const payload: SubmitRequest = {
-        diagnosed_pathology_id: 0,
-        details_text: diagnosisText,
-        prescribed_medication_ids: [],
-        comment: prescriptionText
+        diagnosed_pathology_text: diagnosisText,
+        prescribed_treatment_text: prescriptionText,
+        final_justification: justification
     };
     
-    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+    console.log('📤 Payload envoyé:', JSON.stringify(payload, null, 2));
+    console.log('⚠️ VERIFICATION: Le payload ne contient que diagnosed_pathology_text, prescribed_treatment_text, final_justification');
     
     const start = performance.now();
     
@@ -361,16 +364,20 @@ export const submitSimulationDiagnosis = async (
         );
         
         console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
-        console.log('📊 Score:', response.score);
+        console.log('📊 Score Total:', response.evaluation.score_total, '/20');
+        console.log('   - Diagnostic:', response.evaluation.score_diagnostic, '/10');
+        console.log('   - Thérapeutique:', response.evaluation.score_therapeutique, '/5');
+        console.log('   - Démarche:', response.evaluation.score_demarche, '/5');
         console.log('💬 Feedback:', response.feedback_global);
-        console.log('➡️ Next:', response.next_action);
-        console.log('📥 Response:', JSON.stringify(response, null, 2));
+        console.log('➡️ Recommandation:', response.recommendation_next_step);
+        console.log('📥 Response complète:', JSON.stringify(response, null, 2));
         console.groupEnd();
         
         return response;
         
-    } catch (error) {
-        console.error('❌ Failed:', error);
+    } catch (error: any) {
+        console.error('❌ Submit Failed:', error);
+        console.error('❌ Error details:', error.message);
         console.groupEnd();
         throw error;
     }
@@ -408,3 +415,8 @@ export const getSessionDetails = async (sessionId: string) => {
     console.log(`📄 [API] Get Session Details - ${sessionId}`);
     return await apiClient(`/simulation/sessions/${sessionId}`);
 };
+
+
+
+
+
