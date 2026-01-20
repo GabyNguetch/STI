@@ -457,7 +457,15 @@ export default function InscriptionPage() {
 FICHIER: D:\5GI\STI\fulltang-sti\app\api\chat\route.ts
 ================================================================================
 
+// app/api/chat/route.ts
+import { NextResponse } from 'next/server';
 
+export async function POST() {
+  return NextResponse.json(
+    { message: "Service de chat en cours de construction" },
+    { status: 200 }
+  );
+}
 
 
 ================================================================================
@@ -1731,20 +1739,47 @@ interface ChatWindowProps {
   isTyping?: boolean;
 }
 
-// --- COMPOSANT : FEEDBACK TUTEUR (INTÉGRÉ) ---
-const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultOpen: boolean }) => {
+// Styliser le texte avec italique bleu pour les gestes (*texte*)
+const parseGestureText = (text: string) => {
+    const parts = text.split(/(\*[^*]+\*)/g);
+    
+    return parts.map((part, index) => {
+        if (part.startsWith('*') && part.endsWith('*')) {
+            const gestureText = part.slice(1, -1);
+            return (
+                <span key={index} className="italic text-blue-600 font-medium">
+                    {gestureText}
+                </span>
+            );
+        }
+        return <span key={index}>{part}</span>;
+    });
+};
+
+// COMPOSANT : FEEDBACK TUTEUR
+const TutorFeedbackBlock = ({ feedback, defaultOpen, messageIndex }: { feedback: any, defaultOpen: boolean, messageIndex: number }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
 
-    if (!feedback) return null;
+    console.log(`[TutorFeedback #${messageIndex}] Feedback reçu:`, feedback, "- Type:", typeof feedback);
 
-    // Parse le feedback s'il est en string JSON
+    if (!feedback) {
+        console.log(`⚠️ [TutorFeedback #${messageIndex}] Pas de feedback`);
+        return null;
+    }
+
+    // Parser le feedback
     let parsedFeedback = feedback;
+    
     if (typeof feedback === 'string') {
         try {
             parsedFeedback = JSON.parse(feedback);
+            console.log(`✅ [TutorFeedback #${messageIndex}] Feedback parsé depuis JSON:`, parsedFeedback);
         } catch {
             parsedFeedback = { general: feedback };
+            console.log(`ℹ️ [TutorFeedback #${messageIndex}] Feedback traité comme texte simple`);
         }
+    } else {
+        console.log(`✅ [TutorFeedback #${messageIndex}] Feedback déjà objet:`, parsedFeedback);
     }
 
     return (
@@ -1803,7 +1838,6 @@ const TutorFeedbackBlock = ({ feedback, defaultOpen }: { feedback: any, defaultO
     );
 };
 
-// --- COMPOSANT PRINCIPAL ---
 const ChatWindow: React.FC<ChatWindowProps> = ({
   patientData,
   selectedService,
@@ -1833,7 +1867,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   return (
     <div className="w-full h-[600px] flex flex-col bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden relative">
       
-      {/* 1. EN-TÊTE : Infos Patient + Progression */}
+      {/* EN-TÊTE : Infos Patient + Progression */}
       <div className="flex-shrink-0 p-4 border-b border-gray-100 bg-white z-10 flex justify-between items-center">
         <button onClick={onShowPatientInfo} className="flex items-center gap-4 group transition-opacity hover:opacity-80">
             <div className="relative">
@@ -1868,15 +1902,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       </div>
 
-      {/* 2. ZONE DE MESSAGES SCROLLABLE */}
+      {/* ZONE DE MESSAGES SCROLLABLE */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/50 scrollbar-thin scrollbar-thumb-gray-300">
         
         {messages.map((msg, index) => {
-          // --- TYPE 1: MESSAGE SYSTÈME / ALERTE ---
+          // MESSAGE SYSTÈME / ALERTE
           if (msg.sender === 'system') {
             const isBad = msg.quality === 'bad';
-            
-            // Si c'est un résultat d'examen formaté (contient des sauts de ligne ou markdown)
             const isFormattedResult = msg.text.includes('\n') || msg.text.includes('**');
             
             if (isFormattedResult) {
@@ -1889,7 +1921,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                       </div>
                       <div className="flex-1 min-w-0">
                         {msg.text.split('\n').map((line, i) => {
-                          // Support Markdown simple
                           const isBold = line.includes('**');
                           const cleanLine = line.replace(/\*\*/g, '');
                           
@@ -1915,7 +1946,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               );
             }
             
-            // Message système simple
             return (
               <div key={index} className="flex justify-center my-2 opacity-80 hover:opacity-100 transition-opacity">
                   <span className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 border shadow-sm ${
@@ -1930,7 +1960,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             );
           }
 
-          // --- TYPE 2: INDICE DU TUTEUR ---
+          // INDICE DU TUTEUR
           if (msg.sender === 'tutor') {
               return (
                   <div key={index} className="flex justify-center my-4 animate-bounce-in">
@@ -1949,7 +1979,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           
           const isDoctor = msg.sender === 'doctor';
 
-          // --- TYPE 3: ÉCHANGE DOCTEUR / PATIENT ---
+          // ÉCHANGE DOCTEUR / PATIENT
           return (
             <div key={index} className={`flex w-full ${isDoctor ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
                 <div className={`flex items-end gap-2.5 max-w-[85%] ${isDoctor ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -1968,14 +1998,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             ? 'bg-[#052648] text-white rounded-br-none'
                             : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
                         }`}>
-                            {msg.text}
+                            {parseGestureText(msg.text)}
                         </div>
 
-                        {/* --- INJECTION DU FEEDBACK TUTEUR (Sous le message Patient) --- */}
+                        {/* INJECTION DU FEEDBACK TUTEUR (Sous le message Patient) */}
                         {!isDoctor && msg.feedback && (
                             <TutorFeedbackBlock 
                                 feedback={msg.feedback} 
-                                defaultOpen={index === 1} // Premier message patient : ouvert par défaut
+                                defaultOpen={index === 1}
+                                messageIndex={index}
                             />
                         )}
 
@@ -1989,7 +2020,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           );
         })}
 
-        {/* --- INDICATEUR DE FRAPPE (PATIENT) --- */}
+        {/* INDICATEUR DE FRAPPE (PATIENT) */}
         {isTyping && (
             <div className="flex w-full justify-start animate-in fade-in duration-300">
                <div className="flex items-end gap-2.5 max-w-[85%]">
@@ -2007,7 +2038,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </div>
         )}
         
-        {/* Ancre pour scroll automatique */}
         <div ref={messagesEndRef} />
 
         {/* Message de fin si GameOver */}
@@ -2023,11 +2053,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
       </div>
 
-      {/* 3. ZONE DE SAISIE */}
+      {/* ZONE DE SAISIE */}
       <div className="p-4 bg-white border-t border-gray-100 z-10">
         
-        {/* Petit rappel pour la phase tutorée */}
-        {messageCount < 5 && (
+        {messageCount < MAX_QUESTIONS && (
             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-blue-600 animate-fade-in bg-blue-50 w-fit px-2 py-1 rounded-md">
                 <MessageCircleQuestion size={12} /> 
                 Mode Tutoré actif : Vos questions sont analysées par l'IA.
@@ -2746,26 +2775,24 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Thermometer, Gauge, Wind, ClipboardCheck } from 'lucide-react';
 
-// Composants & Contextes
 import FunFactLoader from '@/components/common/FunFactLoader';
 import ConsultationView from '@/components/simulation/ConsultationView';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Types & Constantes
 import { services, exampleExams } from '@/types/simulation/constant';
 import { Patient, Service, Message, GameState, ClinicalExam } from '@/types/simulation/types';
 
-// Services
 import { 
     startSimulationSession, 
     sendSimulationAction, 
     requestSimulationHint, 
     submitSimulationDiagnosis,
     getSessionMessages,
+    sendChatMessage,
     StartSessionResponse,
     SubmitResponse,
     ActionRequest,
-    TutorFeedback
+    SimulationMessage
 } from '@/services/SimulationService';
 
 // ==========================================
@@ -2891,17 +2918,24 @@ export default function SimulationContent() {
         try {
             setCurrentView('loading');
 
+            console.log('📤 [API REQUEST] POST /api/v1/simulation/sessions/start');
+            console.log('📦 Payload:', JSON.stringify({ learner_id: user.id, category, force_mode: mode }, null, 2));
+
             const data: StartSessionResponse = await startSimulationSession(user.id, null, category, mode);
+            
+            console.log('✅ [API RESPONSE] Session créée');
+            console.log('📥 Response:', JSON.stringify(data, null, 2));
             
             setSessionId(data.session_id);
             setSessionMode(mode);
             
+            // Configuration selon le mode
             if (mode === 'diagnostic') {
                 setMaxInteractions(5);
-                setHintsRemaining(999);
+                setHintsRemaining(999); // Infini
             } else {
                 setMaxInteractions(10);
-                setHintsRemaining(5);
+                setHintsRemaining(5); // Limité
             }
 
             const safePatient = mapBackendToPatient(data);
@@ -2914,15 +2948,15 @@ export default function SimulationContent() {
 
             setMessages([{
                 sender: 'system',
-                text: `Début de la simulation (${mode}). ${mode === 'diagnostic' ? '5 questions' : '10 questions'}. Les examens ne comptent pas.`,
+                text: `🎯 Session ${mode === 'diagnostic' ? 'Évaluation Diagnostique' : mode === 'training' ? 'Entraînement' : 'Évaluation'} démarrée.\n📊 ${mode === 'diagnostic' ? '5' : '10'} questions autorisées.\n💡 ${mode === 'diagnostic' ? 'Indices illimités' : '5 indices disponibles'}.`,
                 time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
             }]);
 
             setCurrentView('consultation');
-            toast.success(`Dossier patient ouvert`, { icon: '📂' });
+            toast.success(`Dossier patient ouvert - Mode ${mode}`, { icon: '📂' });
 
         } catch (error: any) {
-            console.error("Critical Init Error:", error);
+            console.error("❌ Critical Init Error:", error);
             toast.error("Impossible de charger le patient. Retour au dashboard.");
             setTimeout(() => router.push('/dashboard'), 2000);
         } finally {
@@ -2946,86 +2980,132 @@ export default function SimulationContent() {
         const currentMsg = inputMessage;
         setInputMessage("");
         setIsThinking(true);
-        setInteractionsCount(prev => prev + 1);
 
+        // Message du docteur (UI immédiat)
         setMessages(prev => [...prev, {
             sender: 'doctor',
             text: currentMsg,
             time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
         }]);
 
+        // Incrémenter le compteur
+        const newCount = interactionsCount + 1;
+        setInteractionsCount(newCount);
+
         try {
-            console.time("ChatTurn");
+            console.group(`💬 [CHAT ${newCount}/${maxInteractions}] Message Apprenant`);
+            console.log(`📤 Question: "${currentMsg}"`);
+            console.log(`🔗 Session: ${sessionId}`);
+            console.log(`⏰ ${new Date().toISOString()}`);
             
-            const action: ActionRequest = {
-                action_type: 'question',
-                action_name: 'Dialogue',
-                content: currentMsg
+            const chatStart = performance.now();
+            
+            // ENVOI DU MESSAGE VIA L'ENDPOINT CHAT
+            console.log(`🚀 [API REQUEST] POST /api/v1/chat/sessions/${sessionId}/messages`);
+            const payload = {
+                sender: "learner",
+                content: currentMsg,
+                message_metadata: {}
             };
+            console.log('📦 Payload:', JSON.stringify(payload, null, 2));
 
-            await sendSimulationAction(sessionId, action);
+            await sendChatMessage(sessionId, payload);
 
-            // Récupération des derniers messages avec feedback
-            const recentMessages = await getSessionMessages(sessionId, 2);
+            console.log(`✅ Message envoyé (${(performance.now() - chatStart).toFixed(2)}ms)`);
+
+            // RÉCUPÉRATION DES 3 DERNIERS MESSAGES POUR AVOIR LA RÉPONSE
+            console.log(`📥 [API REQUEST] GET /api/v1/chat/sessions/${sessionId}/messages?limit=3`);
             
-            const patientMsg = recentMessages.find(
-                (m: any) => m.sender === 'Patient' || m.sender === 'patient'
-            );
+            const fetchStart = performance.now();
+            const recentMessages = await getSessionMessages(sessionId, 3);
+            
+            console.log(`✅ Messages récupérés (${(performance.now() - fetchStart).toFixed(2)}ms)`);
+            console.log(`📨 Nombre: ${recentMessages.length}`);
+            console.log(`📄 [API RESPONSE] Messages:`, JSON.stringify(recentMessages, null, 2));
 
-            console.timeEnd("ChatTurn");
+            // CHERCHER LE DERNIER MESSAGE DU PATIENT
+            const patientMsg = recentMessages
+                .reverse()
+                .find((m: SimulationMessage) => 
+                    m.sender?.toLowerCase() === 'patient'
+                );
 
             if (patientMsg) {
                 const responseText = patientMsg.content || "...";
                 const feedbackData = patientMsg.message_metadata?.tutor_feedback;
 
-                setMessages(prev => [...prev, {
+                console.log(`🤖 Message Patient trouvé:`);
+                console.log(`   📝 Contenu: "${responseText}"`);
+                console.log(`   🎓 Tutor Feedback:`, JSON.stringify(feedbackData, null, 2));
+
+                const newPatientMessage: Message = {
                     sender: 'patient',
                     text: responseText,
                     time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'}),
-                    feedback: feedbackData ? JSON.stringify(feedbackData) : undefined 
+                    feedback: feedbackData // Objet direct
+                };
+
+                setMessages(prev => [...prev, newPatientMessage]);
+
+                console.log(`✅ Message ajouté à l'interface`);
+            } else {
+                console.warn(`⚠️ Aucun message patient trouvé`);
+                console.log(`Senders reçus:`, recentMessages.map((m: any) => m.sender));
+                
+                setMessages(prev => [...prev, {
+                    sender: 'system',
+                    text: "⚠️ Le patient semble absent. Vérifiez la connexion.",
+                    time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
                 }]);
             }
 
-            if (interactionsCount + 1 >= maxInteractions) {
+            const totalTime = (performance.now() - chatStart).toFixed(2);
+            console.log(`⏱️ Tour complet: ${totalTime}ms`);
+            console.groupEnd();
+
+            // Vérifier si limite atteinte
+            if (newCount >= maxInteractions) {
                 setTimeout(() => {
-                    toast('Dernière interaction effectuée !', { icon: '⚠️' });
+                    console.log(`🏁 Limite atteinte (${newCount}/${maxInteractions})`);
+                    toast('Dernière question effectuée ! Formulez votre diagnostic.', { icon: '⚠️' });
                     setGameState('diagnosing');
                 }, 1500);
             }
 
         } catch (error) {
-            console.error('Chat error:', error);
-            toast.error("Le patient ne répond pas...");
+            console.error('❌ ERREUR CHAT:', error);
+            console.log(`Session: ${sessionId}, Message: ${currentMsg}`);
+            console.groupEnd();
+            
+            toast.error("Erreur de communication avec le patient.");
             setMessages(prev => [...prev, {
-                sender: 'system', text: "Erreur de connexion neuronale.", time: "System"
+                sender: 'system', 
+                text: "❌ Erreur de communication.", 
+                time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
             }]);
         } finally {
             setIsThinking(false);
         }
     };
 
-    // Fonction helper pour formater les résultats d'examens
+    // Formater les résultats d'examens
     const formatExamResult = (result: any): string => {
         if (!result) return "Résultat non disponible";
         
-        // Si c'est déjà une string, on la retourne
         if (typeof result.rapport_complet === 'string') {
             return result.rapport_complet;
         }
         
-        // Si c'est un objet (comme pour les paramètres vitaux)
         if (typeof result.rapport_complet === 'object') {
             const params = result.rapport_complet;
             let formatted = "**Constantes mesurées:**\n";
             
-            // Formatage des paramètres vitaux
             if (params.TA) formatted += `\n• Tension Artérielle: ${params.TA}`;
             if (params.FC) formatted += `\n• Fréquence Cardiaque: ${params.FC}`;
             if (params.FR) formatted += `\n• Fréquence Respiratoire: ${params.FR}`;
             if (params.SpO2) formatted += `\n• Saturation O₂: ${params.SpO2}`;
             if (params.Temp) formatted += `\n• Température: ${params.Temp}`;
             
-            // Ajout de la conclusion si disponible
             if (result.conclusion) {
                 formatted += `\n\n**Interprétation:** ${result.conclusion}`;
             }
@@ -3033,7 +3113,6 @@ export default function SimulationContent() {
             return formatted;
         }
         
-        // Si c'est un examen biologique avec valeurs_cles
         if (result.valeurs_cles && typeof result.valeurs_cles === 'object') {
             let formatted = "**Résultats biologiques:**\n";
             
@@ -3048,7 +3127,6 @@ export default function SimulationContent() {
             return formatted;
         }
         
-        // Fallback: essayer de retourner la conclusion
         return result.conclusion || result.text || "Résultat disponible dans le dossier.";
     };
 
@@ -3060,16 +3138,19 @@ export default function SimulationContent() {
         if (!sessionId) return;
         setIsThinking(true);
 
+        console.group(`💉 [ACTION MÉDICALE] ${actionType.toUpperCase()}`);
+        console.log(`📋 Examen: ${name}`);
+        console.log(`📝 Justification: ${justification || 'N/A'}`);
+        console.log(`🔗 Session: ${sessionId}`);
+
         setMessages(prev => [...prev, {
             sender: 'system',
-            text: `Action: ${name} en cours...`,
+            text: `⏳ ${name} en cours...`,
             time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'}),
             isAction: true
         }]);
 
         try {
-            console.log(`💉 [ACTION] ${name} (${actionType})`);
-            
             const action: ActionRequest = {
                 action_type: actionType,
                 action_name: name,
@@ -3077,9 +3158,15 @@ export default function SimulationContent() {
                 content: name
             };
 
+            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/actions`);
+            console.log(`📦 Payload:`, JSON.stringify(action, null, 2));
+
+            const actionStart = performance.now();
             const response = await sendSimulationAction(sessionId, action);
 
-            // Formatage intelligent du résultat
+            console.log(`✅ [API RESPONSE] (${(performance.now() - actionStart).toFixed(2)}ms)`);
+            console.log(`📥 Résultat:`, JSON.stringify(response, null, 2));
+
             const formattedResult = formatExamResult(response.result);
             
             setMessages(prev => [...prev, {
@@ -3090,10 +3177,14 @@ export default function SimulationContent() {
                 quality: 'good'
             }]);
 
+            console.log(`✅ Résultat affiché`);
+            console.groupEnd();
+
             setModalState(s => ({...s, exam: false}));
 
         } catch (e) {
-            console.error('Action error:', e);
+            console.error('❌ Erreur action:', e);
+            console.groupEnd();
             toast.error("Impossible de réaliser l'examen");
         } finally {
             setIsThinking(false);
@@ -3101,12 +3192,23 @@ export default function SimulationContent() {
     };
 
     const handleRequestHint = async () => {
-        if (hintsRemaining <= 0) return toast.error("Vous n'avez plus d'indices disponibles.");
+        if (hintsRemaining <= 0) return toast.error("Plus d'indices disponibles.");
         if (!sessionId) return;
 
+        console.group(`💡 [INDICE] Demande`);
+        console.log(`🔗 Session: ${sessionId}`);
+        console.log(`📊 Indices restants: ${hintsRemaining}`);
+
         const loadToast = toast.loading("Le tuteur réfléchit...");
+        
         try {
+            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/request-hint`);
+            
+            const hintStart = performance.now();
             const hintRes = await requestSimulationHint(sessionId);
+            
+            console.log(`✅ [API RESPONSE] (${(performance.now() - hintStart).toFixed(2)}ms)`);
+            console.log(`📥 Indice:`, JSON.stringify(hintRes, null, 2));
             
             setHintsRemaining(prev => prev - 1);
             setMessages(prev => [...prev, {
@@ -3115,10 +3217,14 @@ export default function SimulationContent() {
                 time: new Date().toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})
             }]);
             
+            console.log(`📊 Nouveaux indices restants: ${hintsRemaining - 1}`);
+            console.groupEnd();
+            
             toast.dismiss(loadToast);
             toast.success(`Indice reçu (${hintsRemaining - 1} restants)`);
         } catch(e) {
-            console.error('Hint error:', e);
+            console.error('❌ Erreur indice:', e);
+            console.groupEnd();
             toast.error("Erreur récupération indice", { id: loadToast });
         }
     };
@@ -3129,18 +3235,39 @@ export default function SimulationContent() {
 
     const handleDiagnosisSubmit = async (medications: string, dosage: string) => {
         if (!sessionId) return;
-        const loadToast = toast.loading("Analyse de votre démarche par le collège d'experts...");
+        
+        console.group(`🎓 [DIAGNOSTIC FINAL]`);
+        console.log(`🔗 Session: ${sessionId}`);
+        console.log(`📋 Diagnostic: ${userDiagnosis}`);
+        console.log(`💊 Traitement: ${medications}`);
+        console.log(`📏 Posologie: ${dosage}`);
+        
+        const loadToast = toast.loading("Évaluation en cours...");
         
         try {
             setModalState(prev => ({ ...prev, drug: false }));
 
+            console.log(`🚀 [API REQUEST] POST /api/v1/simulation/sessions/${sessionId}/submit`);
+            
+            const submitPayload = {
+                diagnosed_pathology_id: 0,
+                details_text: userDiagnosis,
+                prescribed_medication_ids: [],
+                comment: `Rx: ${medications}. Posologie: ${dosage}`
+            };
+            
+            console.log(`📦 Payload:`, JSON.stringify(submitPayload, null, 2));
+            
+            const submitStart = performance.now();
             const result: SubmitResponse = await submitSimulationDiagnosis(
                 sessionId, 
                 userDiagnosis, 
                 `Rx: ${medications}. Posologie: ${dosage}`
             );
 
-            console.log("🏆 Score Final:", result.score);
+            console.log(`✅ [API RESPONSE] (${(performance.now() - submitStart).toFixed(2)}ms)`);
+            console.log(`📊 Score: ${result.score}/20`);
+            console.log(`📥 Évaluation:`, JSON.stringify(result, null, 2));
 
             setEvaluationResult({
                 score: result.score,
@@ -3151,16 +3278,22 @@ export default function SimulationContent() {
 
             setGameState('finished');
             setModalState(prev => ({ ...prev, result: true }));
+            
+            console.groupEnd();
+            
             toast.dismiss(loadToast);
-            toast.success(`Évaluation terminée: ${result.score}/20`);
+            toast.success(`Évaluation: ${result.score}/20`);
 
         } catch (e) {
-            console.error('Submit error:', e);
+            console.error('❌ Erreur soumission:', e);
+            console.groupEnd();
             toast.error("Erreur lors de l'évaluation.", { id: loadToast });
         }
     };
 
     const handleExitOrNext = (action: 'exit' | 'next') => {
+        console.log(`🚪 Action: ${action}`);
+        
         if (action === 'exit') {
             router.push('/dashboard/goals');
         } else {
@@ -3236,7 +3369,7 @@ export default function SimulationContent() {
                 onReset={() => router.push('/dashboard')}
             />
 
-            {/* --- MODAL RÉSULTATS --- */}
+            {/* MODAL RÉSULTATS */}
             {modalState.result && evaluationResult && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur p-4 animate-in fade-in zoom-in-95">
                     <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
@@ -3272,13 +3405,13 @@ export default function SimulationContent() {
                                     onClick={() => handleExitOrNext('exit')}
                                     className="flex-1 py-3 px-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors"
                                 >
-                                    Quitter
+                                    Retour Objectifs
                                 </button>
                                 <button 
                                     onClick={() => handleExitOrNext('next')}
                                     className="flex-1 py-3 px-4 bg-[#052648] text-white font-bold rounded-xl hover:bg-blue-900 shadow-lg shadow-blue-900/20 transition-all hover:scale-[1.02]"
                                 >
-                                    {evaluationResult.nextAction === 'retry_level' ? 'Réessayer' : 'Cas Suivant'}
+                                    Cas Suivant
                                 </button>
                             </div>
                         </div>
@@ -14637,7 +14770,7 @@ export interface GoalStatus {
     locked: boolean;
 }
 
-// Feedback Tuteur (venant de message_metadata)
+// Feedback Tuteur
 export interface TutorFeedback {
     chronology_check?: string;
     interpretation_guide?: string;
@@ -14682,10 +14815,16 @@ export interface HintResponse {
     hints_remaining: number;
 }
 
+export interface ChatMessagePayload {
+    sender: "learner";
+    content: string;
+    message_metadata?: Record<string, any>;
+}
+
 // ================= ENDPOINTS =================
 
 /**
- * Démarre une nouvelle session de simulation
+ * Démarre une nouvelle session
  */
 export const startSimulationSession = async (
     learnerId: number,
@@ -14701,9 +14840,9 @@ export const startSimulationSession = async (
     if (caseId) payload.case_id = caseId;
     if (forceMode) payload.force_mode = forceMode;
 
-    console.group('🚀 [API] Starting Simulation Session');
-    console.log('📤 Request Payload:', JSON.stringify(payload, null, 2));
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.group('🚀 [API] Starting Session');
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+    console.log('⏰', new Date().toISOString());
 
     const start = performance.now();
 
@@ -14716,55 +14855,87 @@ export const startSimulationSession = async (
             }
         );
 
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Session Started Successfully');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
 
         return response;
     } catch (error) {
-        console.error('❌ Session Start Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Récupérer l'historique détaillé pour le Dashboard
+ * Envoyer un message dans le chat (NOUVELLE FONCTION)
+ */
+export const sendChatMessage = async (
+    sessionId: string,
+    payload: ChatMessagePayload
+): Promise<SimulationMessage> => {
+    console.group('💬 [API] Send Chat Message');
+    console.log('📍 Session:', sessionId);
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
+    console.log('⏰', new Date().toISOString());
+
+    const start = performance.now();
+
+    try {
+        const response = await apiClient<SimulationMessage>(
+            `/chat/sessions/${sessionId}/messages`,
+            {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            }
+        );
+
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
+        console.groupEnd();
+
+        return response;
+    } catch (error) {
+        console.error('❌ Failed:', error);
+        console.groupEnd();
+        throw error;
+    }
+};
+
+/**
+ * Récupérer l'historique détaillé
  */
 export const getLearnerHistoryDetailed = async (learnerId: number): Promise<DetailedHistoryResponse> => {
     const start = performance.now();
-    console.group(`📚 [API] Get Learner History - ID: ${learnerId}`);
+    console.group(`📚 [API] Get History - Learner ${learnerId}`);
     
     try {
         const data = await apiClient<DetailedHistoryResponse>(`/simulation/learners/${learnerId}/history`);
         
-        const duration = (performance.now() - start).toFixed(2);
-        console.log(`✅ Loaded ${data.historique_par_categorie.length} categories in ${duration}ms`);
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(data, null, 2));
         console.groupEnd();
         
         return data;
     } catch (error) {
-        console.error('❌ History Load Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Envoyer une action (Message, Examen ou Paramètres)
+ * Envoyer une action (Examen, Paramètres)
  */
 export const sendSimulationAction = async (
     sessionId: string,
     action: ActionRequest
 ): Promise<ActionResponse> => {
     const start = performance.now();
-    console.group(`💬 [API] Simulation Action - ${action.action_type}`);
-    console.log('📍 Session ID:', sessionId);
+    console.group(`💉 [API] Action - ${action.action_type}`);
+    console.log('📍 Session:', sessionId);
     console.log('📤 Request:', JSON.stringify(action, null, 2));
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.log('⏰', new Date().toISOString());
     
     try {
         const response = await apiClient<ActionResponse>(
@@ -14775,57 +14946,57 @@ export const sendSimulationAction = async (
             }
         );
 
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Action Completed');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
 
         return response;
     } catch (error) {
-        console.error('❌ Action Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Récupérer les messages d'une session (avec feedback tuteur)
+ * Récupérer les messages d'une session
  */
 export const getSessionMessages = async (
     sessionId: string,
     limit?: number
 ): Promise<SimulationMessage[]> => {
     const start = performance.now();
-    console.group(`📨 [API] Get Session Messages - ${sessionId}`);
+    console.group(`📨 [API] Get Messages - ${sessionId}`);
     
     const url = limit 
         ? `/chat/sessions/${sessionId}/messages?limit=${limit}`
         : `/chat/sessions/${sessionId}/messages`;
     
+    console.log('📍 URL:', url);
+    
     try {
         const messages = await apiClient<SimulationMessage[]>(url);
         
-        const duration = (performance.now() - start).toFixed(2);
-        console.log(`✅ Loaded ${messages.length} messages in ${duration}ms`);
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
+        console.log(`📨 Count: ${messages.length}`);
         console.log('📥 Messages:', JSON.stringify(messages, null, 2));
         console.groupEnd();
         
         return messages;
     } catch (error) {
-        console.error('❌ Messages Load Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Demander un indice au tuteur
+ * Demander un indice
  */
 export const requestSimulationHint = async (sessionId: string): Promise<HintResponse> => {
     const start = performance.now();
     console.group(`💡 [API] Request Hint - ${sessionId}`);
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.log('⏰', new Date().toISOString());
     
     try {
         const response = await apiClient<HintResponse>(
@@ -14833,15 +15004,13 @@ export const requestSimulationHint = async (sessionId: string): Promise<HintResp
             { method: 'POST' }
         );
 
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Hint Received');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
 
         return response;
     } catch (error) {
-        console.error('❌ Hint Request Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
@@ -14855,11 +15024,11 @@ export const submitSimulationDiagnosis = async (
     diagnosisText: string,
     prescriptionText: string
 ): Promise<SubmitResponse> => {
-    console.group('🎓 [API] Submit Final Diagnosis');
-    console.log('📍 Session ID:', sessionId);
+    console.group('🎓 [API] Submit Diagnosis');
+    console.log('📍 Session:', sessionId);
     console.log('📋 Diagnosis:', diagnosisText);
     console.log('💊 Prescription:', prescriptionText);
-    console.log('⏰ Timestamp:', new Date().toISOString());
+    console.log('⏰', new Date().toISOString());
     
     const payload: SubmitRequest = {
         diagnosed_pathology_id: 0,
@@ -14868,7 +15037,7 @@ export const submitSimulationDiagnosis = async (
         comment: prescriptionText
     };
     
-    console.log('📤 Request Payload:', JSON.stringify(payload, null, 2));
+    console.log('📤 Payload:', JSON.stringify(payload, null, 2));
     
     const start = performance.now();
     
@@ -14881,34 +15050,32 @@ export const submitSimulationDiagnosis = async (
             }
         );
         
-        const duration = (performance.now() - start).toFixed(2);
-        console.log('✅ Diagnosis Submitted Successfully');
-        console.log('⏱️ Duration:', duration + 'ms');
+        console.log(`✅ Success (${(performance.now() - start).toFixed(2)}ms)`);
         console.log('📊 Score:', response.score);
         console.log('💬 Feedback:', response.feedback_global);
-        console.log('➡️ Next Action:', response.next_action);
-        console.log('📥 Full Response:', JSON.stringify(response, null, 2));
+        console.log('➡️ Next:', response.next_action);
+        console.log('📥 Response:', JSON.stringify(response, null, 2));
         console.groupEnd();
         
         return response;
         
     } catch (error) {
-        console.error('❌ Diagnosis Submission Failed:', error);
+        console.error('❌ Failed:', error);
         console.groupEnd();
         throw error;
     }
 };
 
 /**
- * Récupérer le statut de progression (Goals)
+ * Récupérer le statut de progression
  */
 export const getLearnerGoalsStatus = async (
     learnerId: number
 ): Promise<GoalStatus[]> => {
-    console.log(`🎯 [API] Get Goals Status - Learner ${learnerId}`);
+    console.log(`🎯 [API] Get Goals - Learner ${learnerId}`);
     
     try {
-        // Pour l'instant, fallback mock - à remplacer par vrai endpoint
+        // Mock temporaire - remplacer par vrai endpoint
         return new Promise(resolve => {
             setTimeout(() => {
                 resolve([
@@ -14919,7 +15086,7 @@ export const getLearnerGoalsStatus = async (
             }, 500);
         });
     } catch (error) {
-        console.warn('⚠️ Goals API warning:', error);
+        console.warn('⚠️ Goals warning:', error);
         return [];
     }
 };
@@ -23730,8 +23897,6 @@ FICHIER: D:\5GI\STI\fulltang-sti\package.json
     "lint": "eslint"
   },
   "dependencies": {
-    "@react-three/drei": "^9.0.0",
-    "@react-three/fiber": "^8.0.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.81.1",
     "axios": "^1.13.2",
@@ -23747,7 +23912,6 @@ FICHIER: D:\5GI\STI\fulltang-sti\package.json
     "react-hot-toast": "^2.6.0",
     "recharts": "^3.6.0",
     "tailwind-merge": "^3.3.1",
-    "three": "^0.128.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
@@ -23756,7 +23920,6 @@ FICHIER: D:\5GI\STI\fulltang-sti\package.json
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/recharts": "^1.8.29",
-    "@types/three": "^0.182.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
     "tailwindcss": "^4",
