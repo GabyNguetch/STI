@@ -76,6 +76,9 @@ function Navbar() {
               <Link href="/inscription" className="w-full px-6 py-3 bg-[#052648] text-white rounded-xl font-bold text-center shadow-lg">
                 Commencer gratuitement
               </Link>
+              <Link href="/expert" className="w-full px-6 py-3 bg-[#052648] text-white rounded-xl font-bold text-center shadow-lg">
+                Expert
+              </Link>
             </div>
           </div>
         </div>
